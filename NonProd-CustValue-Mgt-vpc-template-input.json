@@ -1,0 +1,18 @@
+{
+    "Parameters" : {
+      "AccountDescription" : "CustValue-mgt",
+      "VPCName" : "CustValue-mgt-VPC01",
+      "VPCCIDR" : "10.77.180.0/22",
+      "EnvName" : "nonprod",
+      "VPCDomainName" : "aws.foxtel.internal",
+      "ProjectName" : "DCexit-phase1",
+      "NumberOfAZs" : "3",
+      "QualysExternalId" : "1608667646583",
+      "TGWId" : "tgw-029c4a66167440bc8",
+      "SubnetSemiTrustedCidrBlocks1" : "10.77.180.192/27,10.77.180.224/27,10.77.181.0/27",
+      "SubnetTrustedCidrBlocks1" : "10.77.180.0/26,10.77.180.64/26,10.77.180.128/26",
+      "SubnetTrustedCidrBlocks2" : "10.77.182.0/25,10.77.182.128/25,10.77.183.0/25",
+      "SubnetProtectedCidrBlocks1" : "10.77.181.32/27,10.77.181.64/27,10.77.181.96/27",
+      "SubnetTGWTrustedCidrBlocks1" : "10.77.181.128/28,10.77.181.144/28,10.77.181.160/28"
+    }
+  }
