@@ -1,0 +1,84 @@
+import boto3
+from botocore.vendored import requests
+import logging
+import base64
+import os
+import shutil
+from zipfile import ZipFile
+from io import BytesIO
+verify = False
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.handlers[0].setFormatter(logging.Formatter('[%(asctime)s][%(levelname)s] %(message)s'))
+logging.getLogger('boto3').setLevel(logging.ERROR)
+logging.getLogger('botocore').setLevel(logging.ERROR)
+source_ip = requests.get('http://checkip.amazonaws.com').text.rstrip()
+logger.info('Lambda Process Source IP: %s' % source_ip)
+params = None
+s3_client = boto3.client('s3')
+ssm_client = boto3.client('ssm')
+def get_members(zip):
+    parts = []
+    for name in zip.namelist():
+        if not name.endswith('/'):
+            parts.append(name.split('/')[:-1])
+    prefix = os.path.commonprefix(parts)
+    if prefix:
+        prefix = '/'.join(prefix) + '/'
+    offset = len(prefix)
+    for zipinfo in zip.infolist():
+        name = zipinfo.filename
+        if len(name) > offset:
+            zipinfo.filename = name[offset:]
+            yield zipinfo
+def handler(event, context):
+    CLOUD_ADMIN_PAT_PARAMETER = os.environ['CloudAdminPATParameter']
+    GIT_BRANCH_FILTER_NAME = os.environ['GitBranchFilter']
+    logger.info('Event %s', event)
+    if event['context']['git-token']:
+        OAUTH_token = event['context']['git-token']
+    else:
+        ssmParameterStoreResp = ssm_client.get_parameter(Name = CLOUD_ADMIN_PAT_PARAMETER, WithDecryption = True)
+        OAUTH_token = ssmParameterStoreResp['Parameter']['Value']
+    OutputBucket = event['context']['output-bucket']
+    headers = {}
+    params = None
+    if 'User-Agent' in event['params']['header'].keys() and event['params']['header']['User-Agent'].startswith('GitHub-Hookshot'):
+        if 'zen' in event['body-json'].keys():
+            logger.info('TestPayload: skipping download logic and ending lambda')
+        else:
+            branch = event['body-json']['ref'].replace('refs/heads/', '')
+            if (GIT_BRANCH_FILTER_NAME == 'AllBranch'):
+                GIT_BRANCH_FILTER_NAME = branch
+            if (branch == GIT_BRANCH_FILTER_NAME):
+                repo_name = event['body-json']['repository']['name']
+                repo_owner = event['body-json']['repository']['owner']['name']
+                archive_url = event['body-json']['repository']['archive_url']
+                archive_url = archive_url.replace('{archive_format}', 'zipball').replace('{/ref}', '/' + branch)
+                #archive_url = archive_url+'?access_token='+OAUTH_token
+                #archive_url = archive_url.replace('{archive_format}', 'zipball').replace('{/ref}', '?q=ref:' + branch)
+                headers['Authorization'] = 'token ' + OAUTH_token
+                #s3_archive_file = repo_name+'_'+branch+'.zip'
+                s3_archive_file = 'latest-repo.zip'
+                logger.info('Downloading archive from %s' % archive_url)
+                r = requests.get(archive_url, verify=verify, headers=headers, params=params)
+                #logger.info('git Responce %s' % r.text)
+                f = BytesIO(r.content)
+                zip = ZipFile(f)
+                path = '/tmp/code'
+                zipped_code = '/tmp/zipped_code'
+                try:
+                    shutil.rmtree(path)
+                    os.remove(zipped_code + '.zip')
+                except:
+                    pass
+                finally:
+                    os.makedirs(path)
+                zip.extractall(path, get_members(zip))
+                shutil.make_archive(zipped_code, 'zip', path)
+                logger.info('Uploading zip to S3://%s/%s' % (OutputBucket, s3_archive_file))
+                s3_client.upload_file(zipped_code + '.zip', OutputBucket, s3_archive_file)
+            else:
+                logger.info('The committed branch is %s which is other than set filtered branch %s, so not progressing with download and ending lambda' % (branch,GIT_BRANCH_FILTER_NAME))
+    else:
+        logger.info('Repository is not GitHub: skipping download logic and ending lambda')
