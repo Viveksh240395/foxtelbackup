@@ -1,0 +1,18 @@
+{
+    "Parameters" : {
+      "EnvName"                     : "prod",
+      "InstanceAMI"                 : "ami-046e4eabd9e4eb11f",
+      "NewInstanceAMI"              : "ami-0fa671652a0b2c639",
+      "AWSPRODIAMCHN01InstanceType" : "c5.12xlarge",
+      "AWSPRODIAMCHN02InstanceType" : "c5.12xlarge",
+      "AWSPRODIAMCHN03InstanceType" : "c5.12xlarge",
+      "ProjectName"                 : "KAM",
+      "SecurityDomain"              : "trusted",
+      "ServiceName"                 : "CharonSSP-Idam",
+      "InstanceKeyName"             : "Prod-CustIAM-CharonSSP-Key",
+      "SubnetIDs"                   : "subnet-0e9817530551ab12c,subnet-0b70967fd0a34ef3b,subnet-03ff4af3a213496f2",
+      "VPCID"                       : "vpc-0a51dac43fc0ba783",
+      "awsmigrationproject"         : "MPE12884",
+      "mapmigrated"                 : "d-server-02pti23wwzip1a"
+    }
+}
