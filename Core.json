@@ -1,0 +1,23 @@
+{
+    "Parameters" : {
+      "EnvName"                 : "prod",
+      "ProjectName"             : "KAM",
+      "ServiceName"             : "Core",
+      "SecurityDomain"          : "trusted",
+      "VPCID"                   : "vpc-0fb08401c4433e87b",
+      "SubnetIDs"               : "subnet-0f8dc2ee3aa5dd16e,subnet-005b497a39eba309b,subnet-0159beded1ec13b72",
+      "InstanceAMI"             : "666761109297-AMI-ProdCore",
+      "AMIVersion"              : "0.0.22",
+      "InstanceType"            : "r5.xlarge",
+      "InstanceKeyName"         : "prod-kenan-ec2key",
+      "ELBLogLocation"          : "prod-kenan-loadbalancer-logs",
+      "awsmigrationproject"     : "MPE12884",
+      "mapmigrated"             : "d-server-02xxh11bwyhkgc",
+      "InfraSupportEMail"       : "kenanplatformengineering@foxtel.com.au",
+      "ApplicationSupportEMail" : "TCSAppsManagement@foxtel.com.au",
+      "HostnamePrefix"          : "awsprodcore",
+      "Domain"                  : "sms.foxtel.com.au",
+      "DomainAdmin"             : "svc-aws-linux-join",
+      "DomainController"        : "awsdc00.ent.foxtel.com.au"
+    }
+}
