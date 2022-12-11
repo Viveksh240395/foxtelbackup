@@ -1,0 +1,1501 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Foxtel Image Builder Pipeline for Workpoint Application Using RedHat Linux 7 OS
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Environment configuration
+        Parameters:
+          - VPCID
+          - SecurityDomain
+          - ServiceName
+          - Environment
+      - Label:
+          default: Project Specific
+        Parameters:
+          - ProjectName
+          - awsmigrationproject
+      - Label:
+          default: "Image Builder Parameters"
+        Parameters:
+          - ParentImage
+          - AmiTag
+          - EBSKmsKeyId
+          - SnsKmsKeyId
+          - ImageBuilderKeyPair
+          - EC2IMBSubnetID
+          - LogBucket
+          - LogBucketPrefix
+          - IMBSnsSubscriber
+      - Label:
+          default: "AMI Update Lambda"
+        Parameters:
+          - TaggedNameOfAMI
+          - TopicNameForAMILambdaFailureAlert
+          - AdminSubscriberAMILambda
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'KAM'
+    Description: Must - Project name is must.
+
+  ServiceName:
+    Type: String
+    Default: 'Kenan-Ami-Rhel7'
+    Description: Must - Service name is must.
+    AllowedValues:
+      - Kenan-Ami-Rhel7
+      - Kenan-Ami-Oel7
+      - Kenan-Ami-Amzn2
+      - Kenan-Ami-Rhel7-Workpoint
+      - Kenan-Ami-Rhel7-WorklistHandler
+      - Kenan-Ami-Rhel7-Queue
+      - Kenan-Ami-Rhel7-WebServices
+      - Kenan-Ami-Rhel7-Core
+
+  SecurityDomain:
+    Type: String
+    Default: trusted
+    AllowedValues:
+      - trusted
+      - semi-trusted
+      - protected
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - dev
+      - nonprod
+      - prod
+      - sit1
+      - sit2
+      - dev3
+      - pst1
+      - int4
+      - trn1
+    Default: prod
+
+  VPCID:
+    Description: Please select the VPC ID
+    Type: 'AWS::EC2::VPC::Id'
+
+  ParentImage:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: 'Specify the input AMI ID'
+
+  AmiTag:
+    Type: String
+    Description: 'Specify the AMI Tag Name Value. Eg: kenan-infra-ami-rhel7'
+    Default: Kenan-Ami-Rhel7
+    AllowedValues:
+      - Kenan-Ami-Rhel7
+      - Kenan-Ami-Oel7
+      - Kenan-Ami-Amzn2
+      - Kenan-Ami-Rhel7-Workpoint
+      - Kenan-Ami-Rhel7-WorklistHandler
+      - Kenan-Ami-Rhel7-Queue
+      - Kenan-Ami-Rhel7-WebServices
+      - Kenan-Ami-Rhel7-Core
+
+  SnsKmsKeyId:
+    Type: String
+    Description: Specify the KMS Key ID for the SNS encryption
+    Default: 'alias/aws/sns'
+
+  ImageBuilderKeyPair:
+    Type: String
+    Description: EC2 SSH Key Pair
+    Default: np-custvaluemgt-imb-linux-key
+
+  EC2IMBSubnetID:
+    Type: String
+    Description: SubnetID for the Test Instance
+    Default: subnet-03807909fae818b9b
+
+  RecipeVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+
+  WPUserCreateInstallComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+
+  WPUserCreateTestComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+
+  WPJavaInstallComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+
+  WPJavaInstallTestComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  WPWLInstallComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  WPWLInstallTestComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  WPTUXInstallComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  WPAppSetupComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  WPAppSetupTestComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  WPRHTSetupComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  WPAppDeployComponentVersion:
+    Type: String
+    Description: "The semantic version of the image recipe.Eg: 1.0.0. You must update this version everytime when there's a change in configurations like AMI ID"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+
+
+  ControlMInstallComponentARN:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: "The Arn of the component created external to this pipeline"
+
+  ControlMInstallTestComponentARN:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: "The Arn of the component created external to this pipeline"
+
+  KinesisAgentInstallComponentARN:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: "The Arn of the component created external to this pipeline"
+
+  KinesisAgentInstallTestComponentARN:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: "The Arn of the component created external to this pipeline"
+
+  OracleClientInstallComponentARN:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: "The Arn of the component created external to this pipeline"
+
+  OracleClientInstallTestComponentARN:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: "The Arn of the component created external to this pipeline"
+
+  LogBucket:
+    Type: String
+    Description: S3 Bucket Name for storing IMB logs
+    Default: foxtel-linux-repo
+
+  LogBucketPrefix:
+    Type: String
+    Description: S3 Bucket Prefix for storing IMB logs
+    Default: ImageBuilder-logs/RHEL7
+
+  TaggedNameOfAMI:
+    Type: String
+    Description: Tagged value of the key 'Name' of the ImageBuilder AMI.
+    Default: "Kenan-Ami-Rhel7-Workpoint"
+    AllowedValues:
+      - Kenan-Ami-Rhel7
+      - Kenan-Ami-Oel7
+      - Kenan-Ami-Amzn2
+      - Kenan-Ami-Rhel7-Workpoint
+      - Kenan-Ami-Rhel7-WorklistHandler
+      - Kenan-Ami-Rhel7-Queue
+      - Kenan-Ami-Rhel7-WebServices
+      - Kenan-Ami-Rhel7-Core
+
+  awsmigrationproject:
+    Type: String
+    Description: aws map project id
+    Default: MPE12884
+
+  IMBSnsSubscriber:
+    Type: String
+    Description: Enter the email of the Subscriber that need alerts on alarm breach in form abc@foxtel.com.au.
+    Default: sainu.daniel@foxtel.com.au
+
+  TopicNameForAMILambdaFailureAlert:
+    Type: String
+    Description: Enter the name of the SNS Topic for alerting for Lambda failure.
+    ConstraintDescription: must be a name without spaces
+    Default: Kenan-Rhel7-WorkPoint-ami-lambda-alert
+    AllowedValues:
+      - Kenan-Rhel7-WorkPoint-ami-lambda-alert
+      - Kenan-Rhel7-WorklistHandler-ami-lambda-alert
+      - Kenan-Rhel7-Queue-ami-lambda-alert
+      - Kenan-Rhel7-WebServices-ami-lambda-alert
+      - Kenan-Rhel7-Core-ami-lambda-alert
+
+  AdminSubscriberAMILambda:
+    Type: String
+    Description: Enter the email of the Subscriber that need alerts on alarm breach in form abc@foxtel.com.au.
+    Default: sainu.daniel@foxtel.com.au
+
+
+Resources:
+#Lambda function to update the ImageBuilder Latest AMI in the Paramater Store
+  LatestAMIUpdateLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.8
+      DeadLetterConfig:
+        TargetArn: !Ref LatestAMIUpdateLambdaFailureTopic
+      Role: !GetAtt LatestAMIUpdateLambdaIAMRole.Arn
+      Handler: index.lambda_handler
+      Timeout: 60
+      Environment:
+         Variables:
+          taggedAMIName: !Ref TaggedNameOfAMI
+
+      Code:
+        ZipFile: |
+          from __future__ import print_function
+          import json
+          import datetime
+          import time
+          import boto3
+          from operator import itemgetter
+          import os
+
+          print('Loading function')
+
+          def lambda_handler(event, context):
+              print("Received event: " + json.dumps(event, indent=2))
+
+              message = event['Records'][0]['Sns']['Message']
+              imagebuildermessage = json.loads(message)
+              extractedstate = imagebuildermessage['state']
+              print(extractedstate)
+
+              pipeline_status = extractedstate['status']
+              print(pipeline_status)
+
+              # get autoscaling client
+              client = boto3.client('autoscaling')
+
+              # get ec2 client
+              ec2_client = boto3.client('ec2')
+
+              # get ssm client
+              ssm = boto3.client('ssm')
+
+              # get ssm client
+              sns_client = boto3.client('sns')
+
+              if pipeline_status == "AVAILABLE":
+                  print(pipeline_status)
+
+                  # We need to use the TAGGED NAME value of the AMI.
+                  tagged_name_of_ami = os.environ['taggedAMIName']
+                  print(tagged_name_of_ami)
+
+                  # get AMIs by tagged name value and state
+                  ami_list = ec2_client.describe_images(Filters=[{'Name':'tag:Name', 'Values': [tagged_name_of_ami]}, {'Name': 'state', 'Values': ['available']}])
+
+                  #Sort the ami_list by CreationDate in decending order.
+                  image_details = sorted(ami_list['Images'],key=itemgetter('CreationDate'),reverse=True)
+
+                  #Get the AMI id of the image with the latest CreationDate.
+                  ami_id = image_details[0]['ImageId']
+                  ami_id_creation_date = image_details[0]['CreationDate']
+
+                  print(ami_id)
+                  print(ami_id_creation_date)
+
+                  # update ssm parameter with the latest ami
+                  ssm.put_parameter (
+                    Name=tagged_name_of_ami,
+                    Value=ami_id,
+                    Type='String',
+                    Overwrite=True
+                  )
+              else:
+                  print("Image Pipeline is not success!")
+
+  LatestAMIUpdateLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt LatestAMIUpdateLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn : !Ref LatestAMIUpdateLambdaTrigger
+
+
+  LatestAMIUpdateLambdaFailureEventInvoke:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref LatestAMIUpdateLambdaFailureTopic
+      FunctionName: !Ref LatestAMIUpdateLambda
+      Qualifier: $LATEST
+      MaximumEventAgeInSeconds: 600
+      MaximumRetryAttempts: 0
+
+#----- SNS Topic to Trigget Lambda & also send success alerts---------
+  LatestAMIUpdateLambdaTrigger:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${ServiceName}LatestAMIUpdateLambdaTrigger
+      DisplayName: !Sub ${ServiceName}LatestAMIUpdateLambdaTrigger
+      KmsMasterKeyId: !Ref SnsKmsKeyId
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: Name
+          Value: !Sub ${ServiceName}LatestAMIUpdateLambdaTrigger
+
+# To allow subscribe Lambda in client accounts that update the local parameter store with latest AMI,
+# add account details in the 'grant-other-accounts-permission-to-subscribe' section below.
+  LatestAMIUpdateLambdaTriggerPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+       Topics:
+          - !Ref LatestAMIUpdateLambdaTrigger
+       PolicyDocument:
+         Version: '2008-10-17'
+         Id: __default_policy_ID
+         Statement:
+         - Sid: __default_statement_ID
+           Effect: Allow
+           Principal:
+              AWS: "*"
+           Action:
+            - SNS:GetTopicAttributes
+            - SNS:SetTopicAttributes
+            - SNS:AddPermission
+            - SNS:RemovePermission
+            - SNS:DeleteTopic
+            - SNS:Subscribe
+            - SNS:ListSubscriptionsByTopic
+            - SNS:Publish
+            - SNS:Receive
+           Resource: !Ref LatestAMIUpdateLambdaTrigger
+           Condition:
+            StringEquals:
+              AWS:SourceOwner: !Ref AWS::AccountId
+         - Sid: grant-other-accounts-permission-to-subscribe
+           Effect: Allow
+           Principal:
+             AWS:
+               - arn:aws:iam::758013384611:root
+               - arn:aws:iam::666761109297:root
+           Action:
+            - SNS:Receive
+            - SNS:Subscribe
+           Resource: !Ref LatestAMIUpdateLambdaTrigger
+
+  LatestAMIUpdateLambdaSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref LatestAMIUpdateLambdaTrigger
+      Endpoint: !GetAtt LatestAMIUpdateLambda.Arn
+      Protocol: lambda
+
+  LatestAMIAdminSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref LatestAMIUpdateLambdaTrigger
+      Endpoint: !Ref IMBSnsSubscriber
+      Protocol: email
+
+
+#SNS topic for the Lambda function Failure Alerts.
+  LatestAMIUpdateLambdaFailureTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref TopicNameForAMILambdaFailureAlert
+      DisplayName: !Ref TopicNameForAMILambdaFailureAlert
+      KmsMasterKeyId: 'alias/aws/sns'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: Name
+          Value: !Ref TopicNameForAMILambdaFailureAlert
+
+  LatestAMIUpdateLambdaFailureSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref LatestAMIUpdateLambdaFailureTopic
+      Endpoint: !Ref AdminSubscriberAMILambda
+      Protocol: email
+      DeliveryPolicy:
+        healthyRetryPolicy:
+          numRetries: 20
+          minDelayTarget: 10
+          maxDelayTarget: 30
+          numMinDelayRetries: 3
+          numMaxDelayRetries: 17
+          numNoDelayRetries: 0
+          backoffFunction: exponential
+
+#IAM Role for above LatestAMIUpdateLambda
+  LatestAMIUpdateLambdaIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Action:
+          - sts:AssumeRole
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+      Description: Lambda role that allows access to EC2, ASG, Lambda, SNS, SSM and EventBridge for the purpose of updating the latest Image Builder Linux AMI LatestAMIUpdateLambda function.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+      RoleName: !Sub '${Environment}-${ServiceName}-lambdarole'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+
+ # ........Image Builder Code Starts here ..............
+
+ # Instance Profile
+  EC2ImageBuilderProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2ImageBuilderRole']
+
+  # IAM Role For EC2s
+  EC2ImageBuilderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ServiceName}-EC2-Role'
+      Description: !Sub "IAM role for resulting EC2 instance of ImageBuilder pipeline"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: "ec2.amazonaws.com"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/AWSImageBuilderFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+        - "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+      Tags:
+        - Key: Name
+          Value: !Sub '${ServiceName}-EC2-Role'
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+
+  KMSPolicyForEC2Role:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: !Sub '${ServiceName}-EC2-KMS-Policy'
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+         - Effect: Allow
+           Action:
+             - kms:Decrypt
+             - kms:DescribeKey
+             - kms:Encrypt
+             - kms:GenerateDataKey*
+             - kms:ReEncrypt*
+           Resource: '*'
+      Roles:
+         - !Ref EC2ImageBuilderRole
+
+  EC2IMBSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${ServiceName}-SG'
+      GroupName : !Sub '${SecurityDomain}-${ServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: Name
+          Value: !Sub '${ServiceName}-ImageBuilder-SG'
+      VpcId: !Ref 'VPCID'
+
+# KMS Key For EBS Volume Encryption
+  EBSKmsKeyId:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS Key ID for EBS volume encryption for Golden AMI
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-default-1
+        Statement:
+        - Sid: Enable IAM User Permissions
+          Effect: Allow
+          Principal:
+            "AWS": "arn:aws:iam::616143778897:root"
+          Action: kms:*
+          Resource: '*'
+        - Sid: Allow administration of the key
+          Effect: Allow
+          Principal:
+            "AWS": "arn:aws:iam::616143778897:role/Dev-CustValueMgt-Cloud-Engineer"
+          Action:
+          - kms:Create*
+          - kms:Describe*
+          - kms:Enable*
+          - kms:List*
+          - kms:Put*
+          - kms:Update*
+          - kms:Revoke*
+          - kms:Disable*
+          - kms:Get*
+          - kms:Delete*
+          - kms:ScheduleKeyDeletion
+          - kms:CancelKeyDeletion
+          Resource: '*'
+        - Sid: Allow use of the key
+          Effect: Allow
+          Principal:
+            "AWS":
+               - "arn:aws:iam::616143778897:role/Dev-CustValueMgt-Cloud-Engineer"
+               - "arn:aws:iam::616143778897:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+               - "arn:aws:iam::758013384611:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+               - "arn:aws:iam::616143778897:root"
+               - "arn:aws:iam::758013384611:root"
+               - "arn:aws:iam::666761109297:root"
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:DescribeKey
+          - kms:Sign
+          - kms:Verify
+          - kms:DescribeKey
+          Resource: '*'
+
+        - Sid: Allow attachment of persistent resources
+          Effect: Allow
+          Principal:
+            "AWS":
+              - "arn:aws:iam::616143778897:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+              - "arn:aws:iam::758013384611:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+          Action:
+          - kms:CreateGrant
+          Resource: "*"
+          Condition:
+            Bool:
+              kms:GrantIsForAWSResource: true
+
+        - Sid: Allow attachment of persistent resources in external accounts
+          Effect: Allow
+          Principal:
+            "AWS":
+              - "arn:aws:iam::758013384611:root"
+              - "arn:aws:iam::666761109297:root"
+          Action:
+          - kms:CreateGrant
+          Resource: "*"
+
+  EBSKmsKeyIdAlias:
+    Type: 'AWS::KMS::Alias'
+    Properties:
+      AliasName: !Sub alias/${ServiceName}EbsAmiKmsKeyId
+      TargetKeyId: !Ref EBSKmsKeyId
+
+# Image Bulder Pipeline
+  Pipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Description: !Sub "${ServiceName} Image Pipeline"
+      DistributionConfigurationArn: !Ref PipelineDistribution
+      ImageRecipeArn: !Ref PipelineRecipe
+      InfrastructureConfigurationArn: !Ref PipelineConfiguration
+      Name: !Sub "${ServiceName} Image Pipeline"
+      Status: ENABLED
+    DependsOn:
+      - PipelineDistribution
+      - PipelineRecipe
+      - PipelineConfiguration
+
+# Infrastructure Configurations
+  PipelineConfiguration:
+    Type: 'AWS::ImageBuilder::InfrastructureConfiguration'
+    Properties:
+      Name: !Sub "${ServiceName} Image - Infrastructure Configuration"
+      InstanceProfileName: !Ref EC2ImageBuilderProfile
+      Description: !Sub '${ServiceName} Image - Infrastructure Configurations'
+      InstanceTypes:
+        - 't2.large'
+      KeyPair: !Ref ImageBuilderKeyPair
+      Logging:
+        S3Logs:
+          S3BucketName: !Ref LogBucket
+          S3KeyPrefix: !Ref LogBucketPrefix
+      SnsTopicArn: !Ref LatestAMIUpdateLambdaTrigger
+      TerminateInstanceOnFailure: false
+      SecurityGroupIds:
+        - !Ref EC2IMBSG
+      SubnetId: !Ref EC2IMBSubnetID
+      Tags:
+        ConfigName: !Sub ${ServiceName}-InfraConfig
+
+# Distribution Configurations
+  PipelineDistribution:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: !Sub "${ServiceName} Image - Distribution Configuration"
+      Description: !Sub '${ServiceName} Image - Distribution Configurations'
+      Distributions:
+        - AmiDistributionConfiguration:
+            Name: !Sub "${ServiceName} Image - AmiCopyConfiguration - {{ imagebuilder:buildDate }}"
+            AmiTags:
+              Name: !Ref AmiTag
+            LaunchPermissionConfiguration:
+              UserIds:
+                - !Ref AWS::AccountId
+                - 758013384611
+                - 666761109297
+          Region: !Ref AWS::Region
+
+# Recipe
+  PipelineRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub '${ServiceName} Image Recipe'
+      Version: !Ref RecipeVersion
+      WorkingDirectory: '/home/ssm-user'
+      ParentImage: !Ref ParentImage
+      Description: !Sub 'Image Builder Recipe for baking ${ServiceName} AMI'
+      Components:
+        - ComponentArn: !Ref ControlMInstallComponentARN
+        - ComponentArn: !Ref ControlMInstallTestComponentARN
+        - ComponentArn: !Ref KinesisAgentInstallComponentARN
+        - ComponentArn: !Ref KinesisAgentInstallTestComponentARN
+        - ComponentArn: !Ref OracleClientInstallComponentARN
+        - ComponentArn: !Ref OracleClientInstallTestComponentARN
+        - ComponentArn: !GetAtt WPUserCreate.Arn
+        - ComponentArn: !GetAtt WPUserCreateTest.Arn
+        - ComponentArn: !GetAtt WPJavaInstall.Arn
+        - ComponentArn: !GetAtt WPJavaInstallTest.Arn
+        - ComponentArn: !GetAtt WPWLInstall.Arn
+        - ComponentArn: !GetAtt WPWLInstallTest.Arn
+        - ComponentArn: !GetAtt WPTUXInstall.Arn
+        - ComponentArn: !GetAtt WPAppSetup.Arn
+        - ComponentArn: !GetAtt WPAppSetupTest.Arn
+        - ComponentArn: !GetAtt WPRHTSetup.Arn
+        - ComponentArn: !GetAtt WPAppDeploy.Arn
+
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+          UninstallAfterBuild: false
+        UserDataOverride:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            rpm -q amazon-ssm-agent
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            KmsKeyId: !Ref EBSKmsKeyId
+            VolumeType: "gp2"
+            VolumeSize: 20
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            KmsKeyId: !Ref EBSKmsKeyId
+            VolumeType: "gp2"
+            VolumeSize: 30
+      Tags:
+        RecipeName: !Sub '${ServiceName} Image Recipe'
+
+# Recipe Components
+  WPUserCreate:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WP User Create Component.'
+      Name: !Sub '${ServiceName}-WP-User-Create-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPUserCreate Install'
+      Version: !Ref WPUserCreateInstallComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-User-create'
+        description: 'WP user and group creation'
+        schemaVersion: 1.0
+        phases:
+         - name: build
+           steps:
+             - name: Create-users-and-groups
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - groupadd -g 3000 arboradm
+                   - groupadd oinstall
+                   - useradd -u 3000 -d /home/fxadmin -m -g arboradm fxadmin
+                   - chmod 755 /var /opt
+             - name: Download-arborlog-FS-script
+               action: S3Download
+               maxAttempts: 2
+               inputs:
+                 - source: s3://foxtel-image-builder-np/Configurations/WorkPoint/arborlogFS.sh
+                   destination: /home/ssm-user/arborlogFS.sh
+             - name: Permission-arborlog-FS-script
+               action: SetFilePermissions
+               inputs:
+                 - path: "{{ build.Download-arborlog-FS-script.inputs[0].destination}}"
+                   permissions: 750
+             - name: Execute-arborlog-FS-creation-script
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - sh /home/ssm-user/arborlogFS.sh      
+                   
+                 
+# Parameter Store for storing Arn for cross stack reference
+  WPUserCreateParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPUserCreateParameterArn
+      Type: String
+      Value: !GetAtt WPUserCreate.Arn
+      Description: WPUserCreateParameter Arn
+      Tags:
+        Name: WPUserCreateParameter Arn
+
+  WPUserCreateTest:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WP User Create Test Component.'
+      Name: !Sub '${ServiceName}-WP-User-Create-Test-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPUserCreate Test'
+      Version: !Ref WPUserCreateTestComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-User-Create-Test'
+        description: 'WP user and group creation testing'
+        schemaVersion: 1.0
+        phases:
+         - name: test
+           steps:
+             - name: create-users-and-groups-test
+               action: ExecuteBash
+               inputs:
+                  commands:
+                    - cat /etc/passwd | grep -w fxadmin; echo $?
+                    - cat /etc/group | grep -w arboradm; echo $?
+# Parameter Store for storing Arn for cross stack reference
+  WPUserCreateTestParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPUserCreateTestParameterArn
+      Type: String
+      Value: !GetAtt WPUserCreateTest.Arn
+      Description: WPUserCreateTestParameter Arn
+      Tags:
+        Name: WPUserCreateTestParameter Arn
+
+  WPJavaInstall:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WP Java Install Component.'
+      Name: !Sub '${ServiceName}-WP-Java-Install-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPJavaInstall'
+      Version: !Ref WPJavaInstallComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-Java-Install'
+        description: 'WP Java installation'
+        schemaVersion: 1.0
+        phases:
+         - name: build
+           steps:
+             - name: create-dirs
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - mkdir -m 755 -p /opt/arbor/installers;chown -R fxadmin:arboradm /opt/arbor;chmod -R 755 /opt/arbor;chmod -R 777 /opt/arbor/installers
+             - name: s3download-binaries
+               action: S3Download
+               timeoutSeconds: 60
+               onFailure: Abort
+               maxAttempts: 3
+               inputs:
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Java/jdk-8u301-linux-x64.tar.gz
+                   destination: /opt/arbor/installers/jdk-8u301-linux-x64.tar.gz
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/WL_12.2.1.3_V886423-01.zip
+                   destination: /opt/arbor/installers/WL_12.2.1.3_V886423-01.zip
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Java/java_installer.sh
+                   destination: /opt/arbor/installers/java_installer.sh
+             - name: Grant-ownership-binaries
+               action: SetFileOwner
+               inputs:
+                 - path: "{{ build.s3download-binaries.inputs[0].destination}}"
+                   owner: fxadmin
+                   group: arboradm
+                 - path: "{{ build.s3download-binaries.inputs[1].destination}}"
+                   owner: fxadmin
+                   group: arboradm
+                 - path: "{{ build.s3download-binaries.inputs[2].destination}}"
+                   owner: fxadmin
+                   group: arboradm
+             - name: Grant-permissions-binaries
+               action: SetFilePermissions
+               inputs:
+                 - path: "{{ build.s3download-binaries.inputs[1].destination}}"
+                   permissions: 775
+                 - path: "{{ build.s3download-binaries.inputs[2].destination}}"
+                   permissions: 775
+             - name: S3Download-config-to-enable-sudo
+               action: S3Download
+               timeoutSeconds: 60
+               onFailure: Abort
+               maxAttempts: 3
+               inputs:
+                 -
+                     source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/env/fxadmin_sudo
+                     destination: /etc/sudoers.d/fxadmin_sudo
+
+             - name: Install-java
+               action: ExecuteBash
+               inputs:
+                 commands:
+                  - sudo -u fxadmin /opt/arbor/installers/java_installer.sh;
+# Parameter Store for storing Arn for cross stack reference
+  WPJavaInstallParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPJavaInstallParameterArn
+      Type: String
+      Value: !GetAtt WPJavaInstall.Arn
+      Description: WPJavaInstallParameter Arn
+      Tags:
+        Name: WPJavaInstallParameter Arn
+
+  WPJavaInstallTest:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WP Java Test Component.'
+      Name: !Sub '${ServiceName}-WP-Java-Test-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPJavaTest'
+      Version: !Ref WPJavaInstallTestComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-Java-Install-Test'
+        description: 'WP Java installation Test'
+        schemaVersion: 1.0
+        phases:
+         - name: test
+           steps:
+             - name: Install-java-test
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - /opt/arbor/jdk/jdk1.8.0/bin/java -version; echo $?
+# Parameter Store for storing Arn for cross stack reference
+  WPJavaInstallTestParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPJavaInstallTestParameterArn
+      Type: String
+      Value: !GetAtt WPJavaInstallTest.Arn
+      Description: WPJavaInstallTestParameter Arn
+      Tags:
+        Name: WPJavaInstallTestParameter Arn
+
+  WPWLInstall:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WP Weblogic Install Component.'
+      Name: !Sub '${ServiceName}-WP-WL-Install-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPWLInstall'
+      Version: !Ref WPWLInstallComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-WL-Install'
+        description: 'WP Weblogic install'
+        schemaVersion: 1.0
+        phases:
+         - name: build
+           steps:
+             - name: Create-wl-dirs
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - mkdir -m 755 -p /opt/arbor/oracle;
+                   - mkdir -m 755 -p /opt/arbor/installers/middleware;
+                   - mkdir -m 755 -p /opt/arbor/installers/middleware/tmp;
+                   - chown -R fxadmin:arboradm /opt/arbor/oracle;
+                   - chown -R fxadmin:arboradm /opt/arbor/installers;
+                   - chown -R fxadmin:arboradm /opt/arbor/installers/middleware/tmp;
+                   - chmod -R 755 /opt/arbor/oracle;
+                   - chmod -R 755 /opt/arbor/installers/middleware;
+                   - chmod -R 755 /opt/arbor/installers/middleware/tmp;
+             - name: s3download-wl-installers
+               action: S3Download
+               timeoutSeconds: 60
+               onFailure: Abort
+               maxAttempts: 2
+               inputs:
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/env/.bash_profile
+                   destination: /home/fxadmin/.bash_profile
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/env/run_workpoint_env.sh
+                   destination: /opt/arbor/run_workpoint_env.sh
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/WL_12.2.1.3_V886423-01.zip
+                   destination: /opt/arbor/installers/middleware/WL_12.2.1.3_V886423-01.zip
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wls_silent_config.xml
+                   destination: /opt/arbor/installers/middleware/wls_silent_config.xml
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/oraInst.loc
+                   destination: /opt/arbor/installers/middleware/oraInst.loc
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wl_installer.sh
+                   destination: /opt/arbor/installers/middleware/wl_installer.sh
+
+             - name: Grant-permissions-env
+               action: SetFilePermissions
+               inputs:
+                 - path: /home/fxadmin/.bash_profile
+                   permissions: 744
+
+                 - path: /opt/arbor/run_workpoint_env.sh
+                   permissions: 744
+
+             - name: Grant-ownership-binaries-wl
+               action: SetFolderOwner
+               inputs:
+                 - path: /opt/arbor/installers/middleware/
+                   owner: fxadmin
+                   group: arboradm
+                   recursive : true
+             - name: Grant-permissions-binaries-wl
+               action: SetFolderPermissions
+               inputs:
+                 - path: /opt/arbor/installers/middleware/
+                   permissions: 755
+                   recursive : true
+             - name: unzip-decompress-installer
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - /usr/bin/unzip "{{ build.s3download-wl-installers.inputs[2].destination }}" -d /opt/arbor/installers/middleware/
+             - name: Install-wl
+               action: ExecuteBash
+               inputs:
+
+                 commands:
+                   - sudo -u fxadmin /opt/arbor/installers/middleware/wl_installer.sh;
+# Parameter Store for storing Arn for cross stack reference
+  WPWLInstallParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPWLInstallParameterArn
+      Type: String
+      Value: !GetAtt WPWLInstall.Arn
+      Description: WPWLInstallParameter Arn
+      Tags:
+        Name: WPWLInstallParameter Arn
+
+  WPWLInstallTest:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WP Weblogic Install Test Component.'
+      Name: !Sub '${ServiceName}-WP-WL-Install-Test-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPWLInstallTest'
+      Version: !Ref WPWLInstallTestComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-WL-Install-Test'
+        description: 'WP Weblogic install test'
+        schemaVersion: 1.0
+        phases:
+         - name: test
+           steps:
+             - name: Grant-permissions-wl-install-output-log
+               action: SetFilePermissions
+               inputs:
+                 - path: /opt/arbor/installers/middleware/wl_installer.sh.log
+                   permissions: 744
+             - name: Install-wl-test
+               action: ExecuteBash
+               inputs:
+                 commands:
+                    - grep "Percent\sComplete\s\:\s100" /opt/arbor/installers/middleware/wl_installer.sh.log
+                    - ls -lrt /opt/arbor/oracle | wc -l
+                    - ls -lrt /opt/arbor/oracle
+# Parameter Store for storing Arn for cross stack reference
+  WPWLInstallTestParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPWLInstallTestParameterArn
+      Type: String
+      Value: !GetAtt WPWLInstallTest.Arn
+      Description: WPWLInstallTestParameter Arn
+      Tags:
+        Name: WPWLInstallTestParameter Arn
+
+# --------------------------------------
+
+  WPTUXInstall:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WP-TUX-Install Component.'
+      Name: !Sub '${ServiceName}-WP-TUX-Install-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WP-TUX-Install'
+      Version: !Ref WPTUXInstallComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-TUX-Install'
+        description: 'WP WLH TUX installation'
+        schemaVersion: 1.0
+        phases:
+         - name: build
+           steps:
+             - name: create-dirs-tux
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - mkdir -m 755 -p /opt/arbor/installers/tuxedo_installer;
+                   - mkdir -m 755 -p /opt/arbor/3p/oracle_apps/tuxedo;
+                   - mkdir -m 755 -p /opt/arbor/oracle_inv/;
+
+                   - chown -R fxadmin:arboradm /opt/arbor/installers/tuxedo_installer;
+                   - chown -R fxadmin:arboradm /opt/arbor/3p/oracle_apps/tuxedo;
+                   - chown -R fxadmin:arboradm /opt/arbor/oracle_inv/;
+
+                   - chmod -R 777 /opt/arbor/installers/tuxedo_installer;
+                   - chmod -R 755 /opt/arbor/3p/oracle_apps/tuxedo;
+                   - chmod -R 755 /opt/arbor/oracle_inv/;
+
+
+             - name: s3download-binaries-tux
+               action: S3Download
+               timeoutSeconds: 60
+               onFailure: Abort
+               maxAttempts: 3
+               inputs:
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Tuxedo/tuxedo122200_64_Linux_01_x86.zip
+                   destination: /opt/arbor/installers/tuxedo_installer/tuxedo122200_64_Linux_01_x86.zip
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Tuxedo/tux_oraInst.loc
+                   destination: /opt/arbor/oracle_inv/tux_oraInst.loc
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Tuxedo/tuxedo_client_silent_install.rsp
+                   destination:  /opt/arbor/installers/tuxedo_installer/tuxedo_client_silent_install.rsp
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Tuxedo/wp_wlh_tux_installer.sh
+                   destination: /opt/arbor/installers/tuxedo_installer/wp_wlh_tux_installer.sh
+
+             - name: Grant-ownership-binaries-tux
+               action: SetFileOwner
+               inputs:
+                 - path: "{{ build.s3download-binaries-tux.inputs[0].destination}}"
+                   owner: fxadmin
+                   group: arboradm
+
+                 - path: "{{ build.s3download-binaries-tux.inputs[1].destination}}"
+                   owner: fxadmin
+                   group: arboradm
+
+                 - path: "{{ build.s3download-binaries-tux.inputs[2].destination}}"
+                   owner: fxadmin
+                   group: arboradm
+
+                 - path: "{{ build.s3download-binaries-tux.inputs[3].destination}}"
+                   owner: fxadmin
+                   group: arboradm
+
+             - name: Grant-permissions-binaries-tux
+               action: SetFilePermissions
+               inputs:
+                  - path: "{{ build.s3download-binaries-tux.inputs[0].destination}}"
+                    permissions: 775
+
+                  - path: "{{ build.s3download-binaries-tux.inputs[1].destination}}"
+                    permissions: 775
+
+                  - path: "{{ build.s3download-binaries-tux.inputs[2].destination}}"
+                    permissions: 775
+
+                  - path: "{{ build.s3download-binaries-tux.inputs[3].destination}}"
+                    permissions: 775
+
+             - name: Install-tux
+               action: ExecuteBash
+               inputs:
+                commands:
+                   - sudo -u fxadmin /opt/arbor/installers/tuxedo_installer/wp_wlh_tux_installer.sh;
+
+# Parameter Store for storing Arn for cross stack reference
+  WPTUXInstallParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPTUXInstallParameterArn
+      Type: String
+      Value: !GetAtt WPTUXInstall.Arn
+      Description: WPTUXInstallParameter Arn
+      Tags:
+        Name: WPTUXInstallParameter Arn
+
+  WPAppSetup:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WPAppSetup Component.'
+      Name: !Sub '${ServiceName}-WPAppSetup-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPAppSetup'
+      Version: !Ref WPAppSetupComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-App-Setup'
+        description: 'WP Application build/setup'
+        schemaVersion: 1.0
+        phases:
+         - name: build
+           steps:
+             - name: s3download-wp-app-setup-scripts
+               action: S3Download
+               timeoutSeconds: 60
+               onFailure: Abort
+               maxAttempts: 2
+               inputs:
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wp_app_build_part1.py
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/wp_app_build_part1.py
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wp_app_build_part2.py
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/wp_app_build_part2.py
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wp.build.properties
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/wp.build.properties
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wl_startup.sh
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/wl_startup.sh
+                 -
+                   source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wp_app_build_wrapper.sh
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/wp_app_build_wrapper.sh
+
+             - name: Grant-permissions-binaries-wp
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - 'chmod 755 {{ build.s3download-wp-app-setup-scripts.inputs[0].destination }}'
+                   - 'chmod 755 {{ build.s3download-wp-app-setup-scripts.inputs[1].destination }}'
+                   - 'chmod 755 {{ build.s3download-wp-app-setup-scripts.inputs[2].destination }}'
+                   - 'chmod 755 {{ build.s3download-wp-app-setup-scripts.inputs[3].destination }}'
+                   - 'chmod 755 {{ build.s3download-wp-app-setup-scripts.inputs[4].destination }}'
+
+             - name: wp-app-build
+               action: ExecuteBash
+               inputs:
+                 commands:
+                    - sudo -u fxadmin /opt/arbor/oracle/oracle_common/common/bin/wp_app_build_wrapper.sh
+
+# Parameter Store for storing Arn for cross stack reference
+  WPAppSetupParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPAppSetupParameterArn
+      Type: String
+      Value: !GetAtt WPAppSetup.Arn
+      Description: WPAppSetupParameter Arn
+      Tags:
+        Name: WPAppSetupParameter Arn
+
+  WPAppSetupTest:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WPAppSetupTest Component.'
+      Name: !Sub '${ServiceName}-WPAppSetupTest-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPAppSetupTest'
+      Version: !Ref WPAppSetupTestComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-App-Setup-Test'
+        description: 'WP Application build test'
+        schemaVersion: 1.0
+        phases:
+         - name: test
+           steps:
+             - name: s3download-wp-app-setup-test-script
+               action: S3Download
+               inputs:
+                  -
+                    source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Weblogic/wp_app_build_verify.sh
+                    destination: /opt/arbor/installers/middleware/wp_app_build_verify.sh
+
+             - name: Grant-permissions-wp-app-setup-test-script
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - 'chmod 755 {{ test.s3download-wp-app-setup-test-script.inputs[0].destination }}'
+
+             - name: wp-app-build-test
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - sudo -u fxadmin /opt/arbor/installers/middleware/wp_app_build_verify.sh;
+
+# Parameter Store for storing Arn for cross stack reference
+  WPAppSetupTestParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPAppSetupTestParameterArn
+      Type: String
+      Value: !GetAtt WPAppSetupTest.Arn
+      Description: WPAppSetupTestParameter Arn
+      Tags:
+        Name: WPAppSetupTestParameter Arn
+
+
+  WPRHTSetup:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WPRHTSetup Component.'
+      Name: !Sub '${ServiceName}-WPRHTSetup-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPRHTSetup'
+      Version: !Ref WPRHTSetupComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-RHT-Setup'
+        description: 'WP RHT Setup'
+        schemaVersion: 1.0
+        phases:
+         - name: build
+           steps:
+             - name: create-dl-dirs
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - mkdir -m 755 -p /opt/arbor/installers/WorkPoint;
+                   - mkdir -m 755 -p /opt/arbor/installers/WorkPoint/config/WorkPoint;
+                   - mkdir -m 755 -p /opt/arbor/installers/WorkPoint/config/lib;
+                   - mkdir -m 755 -p /opt/arbor/installers/WorkPoint/deploy;
+                   - mkdir -m 755 -p /opt/arbor/installers/WorkPoint/bin;
+                   - mkdir -m 755 -p /opt/arbor/installers/WorkPoint/security;
+                   - mkdir -m 755 -p /opt/arbor/scripts/;
+                   - chown -R fxadmin:arboradm /opt/arbor/installers/WorkPoint;
+                   - chown -R fxadmin:arboradm /opt/arbor/scripts/;
+                   - chmod -R 755 /opt/arbor/installers/WorkPoint;
+                   - chmod -R 755 /opt/arbor/scripts/;
+
+             - name: s3download-wp-rht
+               action: S3Download
+               timeoutSeconds: 60
+               onFailure: Abort
+               maxAttempts: 2
+               inputs:
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/bsdm_site.tar
+                     destination: /opt/arbor/installers/WorkPoint/bsdm_site.tar
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/ordering_site.tar
+                     destination: /opt/arbor/installers/WorkPoint/ordering_site.tar
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/workpoint_site.tar
+                     destination: /opt/arbor/installers/WorkPoint/workpoint_site.tar
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/config/WorkPoint/*
+                     destination: /opt/arbor/installers/WorkPoint/config/WorkPoint/
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/config/lib/*
+                     destination: /opt/arbor/installers/WorkPoint/config/lib/
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/deploy/*
+                     destination: /opt/arbor/installers/WorkPoint/deploy/
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/bin/setDomainEnv.sh
+                     destination: /opt/arbor/installers/WorkPoint/bin/setDomainEnv.sh
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/bin/startWebLogic.sh
+                     destination: /opt/arbor/installers/WorkPoint/bin/startWebLogic.sh
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/bin/wp_start.sh
+                     destination: /opt/arbor/scripts/wp_start.sh
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/bin/wp_stop.sh
+                     destination: /opt/arbor/scripts/wp_stop.sh
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/wp_rht_setup.sh
+                     destination: /opt/arbor/installers/WorkPoint/wp_rht_setup.sh
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/config/weblogic.policy
+                     destination: /opt/arbor/installers/WorkPoint/config/weblogic.policy
+                   -
+                     source : s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/security/DemoIdentity.jks
+                     destination: /opt/arbor/installers/WorkPoint/security/DemoIdentity.jks
+
+             - name: Grant-permissions-wp-rht
+               action: SetFolderPermissions
+               inputs:
+                   - path: /opt/arbor/installers/WorkPoint
+                     permissions: 0755
+
+             - name: Grant-ownership-wp-rht
+               action: SetFolderOwner
+               inputs:
+                   - path: /opt/arbor/installers/WorkPoint
+                     owner: fxadmin
+                     group: arboradm
+
+             - name: wp-app-build
+               action: ExecuteBash
+               inputs:
+                 commands:
+                   - sudo -u fxadmin /opt/arbor/installers/WorkPoint/wp_rht_setup.sh;
+
+# Parameter Store for storing Arn for cross stack reference
+  WPRHTSetupParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPRHTSetupParameterArn
+      Type: String
+      Value: !GetAtt WPRHTSetup.Arn
+      Description: WPRHTSetupParameter Arn
+      Tags:
+        Name: WPRHTSetupParameter Arn
+
+  WPAppDeploy:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Description: !Sub '${ServiceName} WPAppDeploy Component.'
+      Name: !Sub '${ServiceName}-WPAppDeploy-Component'
+      Platform: Linux
+      SupportedOsVersions:
+      - Red Hat Enterprise Linux 7
+      Tags:
+        ComponentName: !Sub '${ServiceName} WPAppDeploy'
+      Version: !Ref WPAppDeployComponentVersion
+      ChangeDescription: Initial Version
+      Data: |
+        name: 'WP-App-Deploy'
+        description: 'WP Deploy'
+        schemaVersion: 1.0
+        phases:
+         - name: build
+           steps:
+             - name: S3Download-deploy-scripts
+               action: S3Download
+               timeoutSeconds: 60
+               onFailure: Abort
+               maxAttempts: 3
+               inputs:
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/deploy/wp_app_deploy.py
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/wp_app_deploy.py
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/deploy/hb_app_deploy.py
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/hb_app_deploy.py
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/deploy/wp.deploy.properties
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/wp.deploy.properties
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/deploy/hb.deploy.properties
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/hb.deploy.properties
+                 -
+                   source: s3://foxtel-image-builder-np/Software/Application/Workpoint_Installers/Workpoint/deploy/app_deploy.sh
+                   destination: /opt/arbor/oracle/oracle_common/common/bin/app_deploy.sh
+
+             - name: Grant-ownership-deploy-scripts
+               action: ExecuteBash
+               inputs:
+                 commands:
+                    - 'chmod -R fxadmin:arboradm {{ build.S3Download-deploy-scripts.inputs[0].destination }}'
+                    - 'chmod -R fxadmin:arboradm {{ build.S3Download-deploy-scripts.inputs[1].destination }}'
+                    - 'chmod -R fxadmin:arboradm {{ build.S3Download-deploy-scripts.inputs[2].destination }}'
+                    - 'chmod -R fxadmin:arboradm {{ build.S3Download-deploy-scripts.inputs[3].destination }}'
+                    - 'chmod -R fxadmin:arboradm {{ build.S3Download-deploy-scripts.inputs[4].destination }}'
+                    - chmod -R 755 /opt/arbor/wpdomain/WorkPoint/deploy
+
+             - name: Grant-permissions-deploy-scripts
+               action: ExecuteBash
+               inputs:
+                 commands:
+                    - 'chmod 755 {{ build.S3Download-deploy-scripts.inputs[0].destination }}'
+                    - 'chmod 755 {{ build.S3Download-deploy-scripts.inputs[1].destination }}'
+                    - 'chmod 755 {{ build.S3Download-deploy-scripts.inputs[2].destination }}'
+                    - 'chmod 755 {{ build.S3Download-deploy-scripts.inputs[3].destination }}'
+                    - 'chmod 755 {{ build.S3Download-deploy-scripts.inputs[4].destination }}'
+
+             - name: wp-deploy-war
+               action: ExecuteBash
+               inputs:
+                 commands:
+                    - sudo -u fxadmin /opt/arbor/oracle/oracle_common/common/bin/app_deploy.sh;
+
+# Parameter Store for storing Arn for cross stack reference
+  WPAppDeployParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: WPAppDeployParameterArn
+      Type: String
+      Value: !GetAtt WPAppDeploy.Arn
+      Description: WPAppDeployParameter Arn
+      Tags:
+        Name: WPAppDeployParameter Arn
