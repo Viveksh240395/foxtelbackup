@@ -1,0 +1,3727 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template is used to deploy the base VPC and 3 zoned Networks for accounts
+Parameters:
+  AccountDescription:
+    Type: String
+    Default: ''
+    Description: Specify the account group name in lowercase without environment name(Eg:if account name is 'Prod-Services-Corp', description is 'services-corp')
+  VPCName:
+    Type: String
+    Default: ''
+    Description: Specify the VPC name, this should be prefixed with the account names (e.g. Prod-Services-Corp-vpc01, NP-CustValueMgt-vpc01 etc).For more details - 'https://foxtel.sharepoint.com/:w:/s/CloudEngineering/EW0RdnzQCa5Ih9-D27HyJ0kBonI64X7OdmgYCDGaveLxJA?e=ViHuD6'.
+  EnvName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    AllowedValues:
+      - dev
+      - sit-1
+      - sit-2
+      - uat
+      - pst-1
+      - trn
+      - int-4
+      - prod
+      - nonprod
+    Default: prod
+  VPCDomainName:
+    Type: String
+    Default: 'aws.foxtel.internal'
+    Description: Optional - Specify the VPC domain name, or leave as default.
+  ProjectName:
+    Type: String
+    Default: 'DCexit-phase1'
+    Description: Must - Project name is must.
+  VPCCIDR:
+    Type: String
+    Description: Specify the VPC CIDR address
+  QualysExternalId:
+    Type: String
+    Description: Specify the ExternalId of the Qualys account.
+  NumberOfAZs:
+    Type: Number
+    Description: Specify how may AZs/networks are to be deployed for for each
+    AllowedValues:
+      - 2
+      - 3
+    Default: 3
+  TGWId:
+    Description: Id for the Transit Gateway
+    Type: String
+    AllowedPattern: 'tgw-\w+'
+    Default: tgw-029c4a66167440bc8
+  SubnetTrustedCidrBlocks1:
+    Description: Comma delimited list of Trusted CIDR subnet blocks
+    Type: CommaDelimitedList
+    Default: ""
+  # Additional Trusted Subnet
+  SubnetTrustedCidrBlocks2:
+    Description: Comma delimited list of Trusted CIDR subnet blocks
+    Type: CommaDelimitedList
+    Default: ""
+  SubnetProtectedCidrBlocks1:
+    Description: Comma delimited list of Protected CIDR subnet blocks
+    Type: CommaDelimitedList
+    Default: ""
+  SubnetSemiTrustedCidrBlocks1:
+    Description: Comma delimited list of Semi-Trusted CIDR subnet blocks
+    Type: CommaDelimitedList
+    Default: ""
+  SubnetTGWTrustedCidrBlocks1:
+    Description: Comma delimited list of Semi-Trusted CIDR subnet blocks
+    Type: CommaDelimitedList
+    Default: ""
+
+Conditions:
+  CreateTrusted1:
+    !Not [ !Equals [ '', !Select [ 1, !Ref SubnetTrustedCidrBlocks1] ] ]
+  CreateProtected1:
+    !Not [ !Equals [ '', !Select [ 1, !Ref SubnetProtectedCidrBlocks1] ] ]
+  CreateSemiTrusted1:
+    !Not [ !Equals [ '', !Select [ 1, !Ref SubnetSemiTrustedCidrBlocks1] ] ]
+  CreateTGWTrusted1:
+    !Not [ !Equals [ '', !Select [ 1, !Ref SubnetTGWTrustedCidrBlocks1] ] ]
+  isThreeAZ:
+    !Equals [ !Ref NumberOfAZs, 3 ]
+  isThreeAZTrusted: !And
+    - !Condition CreateTrusted1
+    - !Condition isThreeAZ
+  isThreeAZProtected: !And
+    - !Condition CreateProtected1
+    - !Condition isThreeAZ
+  isThreeAZSemiTrusted: !And
+    - !Condition CreateSemiTrusted1
+    - !Condition isThreeAZ
+  isThreeAZTGWTrusted: !And
+    - !Condition CreateTGWTrusted1
+    - !Condition isThreeAZ
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "General Configuration"
+        Parameters:
+          - EnvName
+      -
+        Label:
+          default: "VPC Configuration"
+        Parameters:
+          - AccountDescription
+          - VPCName
+          - VPCDomainName
+          - VPCCIDR
+          - NumberOfAZs
+          - SubnetTrustedCidrBlocks1
+          - SubnetProtectedCidrBlocks1
+          - SubnetSemiTrustedCidrBlocks1
+          - SubnetTGWTrustedCidrBlocks1
+    ParameterLabels:
+      EnvName:
+        default: "Environment Tag"
+      VPCName:
+        default: "VPC Name"
+      VPCDomainName:
+        default: "Domain Name (FQDN)"
+      NumberOfAZs:
+        default: "No of AZs"
+      SubnetTrustedCidrBlocks1:
+        default: "Subnet CIDR List for Trusted Networks"
+      SubnetProtectedCidrBlocks1:
+        default: "Subnet CIDR List for Protected Networks"
+      SubnetSemiTrustedCidrBlocks1:
+        default: "Subnet CIDR List for Semi-Trusted Networks"
+      SubnetTGWTrustedCidrBlocks1:
+        default: "Subnet CIDR List for TransitGateway-Trusted Networks"
+
+Resources:
+  # Create VPC
+  Vpc1:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref 'VPCCIDR'
+      InstanceTenancy: default
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: !Ref 'VPCName'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  # Create Protected Subnets
+  VpcSubnetProtectedA:
+    Condition: CreateProtected1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [0, !Ref SubnetProtectedCidrBlocks1]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'protected-${AccountDescription}-A'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: protected
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetProtectedB:
+    Condition: CreateProtected1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [1, !Ref SubnetProtectedCidrBlocks1]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'protected-${AccountDescription}-B'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: protected
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetProtectedC:
+    Condition: isThreeAZProtected
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [2, !Ref SubnetProtectedCidrBlocks1]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'protected-${AccountDescription}-C'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: protected
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  # Create Trusted Subnets
+  VpcSubnetTrustedA:
+    Condition: CreateTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [0, !Ref SubnetTrustedCidrBlocks1]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'trusted-${AccountDescription}-A'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetTrustedB:
+    Condition: CreateTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [1, !Ref SubnetTrustedCidrBlocks1]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'trusted-${AccountDescription}-B'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetTrustedC:
+    Condition: isThreeAZTrusted
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [2, !Ref SubnetTrustedCidrBlocks1]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'trusted-${AccountDescription}-C'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+
+# ------------------------------------
+# Create Additional Trusted Subnets 16-June-21
+  VpcSubnetTrustedA02:
+    Condition: CreateTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [0, !Ref SubnetTrustedCidrBlocks2]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'trusted-${AccountDescription}-A-02'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetTrustedB02:
+    Condition: CreateTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [1, !Ref SubnetTrustedCidrBlocks2]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'trusted-${AccountDescription}-B-02'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetTrustedC02:
+    Condition: isThreeAZTrusted
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [2, !Ref SubnetTrustedCidrBlocks2]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'trusted-${AccountDescription}-C-02'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+#--------------------------------------
+
+  # Create Semi-Trusted Subnets
+  VpcSubnetSemiTrustedA:
+    Condition: CreateSemiTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [0, !Ref SubnetSemiTrustedCidrBlocks1]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'semi-trusted-${AccountDescription}-A'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: semi-trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetSemiTrustedB:
+    Condition: CreateSemiTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [1, !Ref SubnetSemiTrustedCidrBlocks1]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'semi-trusted-${AccountDescription}-B'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: semi-trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetSemiTrustedC:
+    Condition: isThreeAZSemiTrusted
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [2, !Ref SubnetSemiTrustedCidrBlocks1]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'semi-trusted-${AccountDescription}-C'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: semi-trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: false
+        - Key: aws-migration-project-id
+          Value: MPE12884
+
+  # Create TGW-Trusted Subnets
+  VpcSubnetTGWTrustedA:
+    Condition: CreateTGWTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [0, !Ref SubnetTGWTrustedCidrBlocks1]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'TGW-trusted-${AccountDescription}-A'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: true
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetTGWTrustedB:
+    Condition: CreateTGWTrusted1
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [1, !Ref SubnetTGWTrustedCidrBlocks1]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'TGW-trusted-${AccountDescription}-B'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: true
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  VpcSubnetTGWTrustedC:
+    Condition: isThreeAZTGWTrusted
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [2, !Ref SubnetTGWTrustedCidrBlocks1]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Sub 'TGW-trusted-${AccountDescription}-C'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: foxtel:tgw-attachment
+          Value: true
+        - Key: aws-migration-project-id
+          Value: MPE12884
+
+  # Create DHCP Options Set
+  VpcDhcpOpts:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: !Ref 'VPCDomainName'
+      DomainNameServers:
+        - AmazonProvidedDNS
+      NtpServers:
+        - "169.254.169.123"
+      Tags:
+        - Key: Name
+          Value: !Ref 'VPCName'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+
+  # Attach DHCP Options to VPC
+  VpcDhcpAssoc:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref 'Vpc1'
+      DhcpOptionsId: !Ref 'VpcDhcpOpts'
+
+  # Create Route tables for each Trusted security zone
+  TrustedRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Join ['', [!Ref VPCName, -Trusted]]
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: Security Domain
+          Value: trusted
+        - Key: foxtel:tgw-attachment
+          Value: true
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  # Subnet Association with Trusted subnet
+  RouteTableTrustedAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'TrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetTrustedA'
+  RouteTableTrustedAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'TrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetTrustedB'
+  RouteTableTrustedAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'TrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetTrustedC'
+
+  # Subnet Association with Additional Trusted subnet02  16-June-21
+  RouteTableTrustedAssociationA02:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'TrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetTrustedA02'
+  RouteTableTrustedAssociationB02:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'TrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetTrustedB02'
+  RouteTableTrustedAssociationC02:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'TrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetTrustedC02'
+
+  # Trusted RouteTable Association with TGW Subnets
+  RouteTableTGWTrustedAssociationA:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'TrustedRouteTable'
+        SubnetId: !Ref 'VpcSubnetTGWTrustedA'
+  RouteTableTGWTrustedAssociationB:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'TrustedRouteTable'
+        SubnetId: !Ref 'VpcSubnetTGWTrustedB'
+  RouteTableTGWTrustedAssociationC:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'TrustedRouteTable'
+        SubnetId: !Ref 'VpcSubnetTGWTrustedC'
+
+  # Create Route tables for each Semi-Trusted security zone
+  SemiTrustedRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Join ['', [!Ref VPCName, -SemiTrusted]]
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: Security Domain
+          Value: semi-trusted
+        - Key: foxtel:tgw-attachment
+          Value: true
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  # Subnet Association with Semi-Trusted subnet
+  RouteTableSemiTrustedAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'SemiTrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetSemiTrustedA'
+  RouteTableSemiTrustedAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'SemiTrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetSemiTrustedB'
+  RouteTableSemiTrustedAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'SemiTrustedRouteTable'
+      SubnetId: !Ref 'VpcSubnetSemiTrustedC'
+  # Create Route tables for each Protected security zone
+  ProtectedRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'Vpc1'
+      Tags:
+        - Key: Name
+          Value: !Join ['', [!Ref VPCName, -Protected]]
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+        - Key: Security Domain
+          Value: protected
+        - Key: foxtel:tgw-attachment
+          Value: true
+        - Key: aws-migration-project-id
+          Value: MPE12884
+  # Subnet Association with Protected subnet
+  RouteTableProtectedAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ProtectedRouteTable'
+      SubnetId: !Ref 'VpcSubnetProtectedA'
+  RouteTableProtectedAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ProtectedRouteTable'
+      SubnetId: !Ref 'VpcSubnetProtectedB'
+  RouteTableProtectedAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ProtectedRouteTable'
+      SubnetId: !Ref 'VpcSubnetProtectedC'
+
+  # Create S3 Gateway endpoint and associate all route tables
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref 'Vpc1'
+      ServiceName: !Join ['', [com.amazonaws., !Ref 'AWS::Region', .s3]]
+      RouteTableIds:
+        - !Ref 'TrustedRouteTable'
+        - !Ref 'ProtectedRouteTable'
+        - !Ref 'SemiTrustedRouteTable'
+
+ # Create a common Security group for interface endpoints
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc1
+      GroupName: VPCEndpointSecurityGroup
+      GroupDescription: VPC Endpoint Security Group
+      SecurityGroupIngress:
+        - CidrIp: !Ref 'VPCCIDR'
+          Description: VPC Endpoint Ingress 10 range
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: "tcp"
+        - CidrIp: !Ref 'VPCCIDR'
+          Description: VPC Endpoint Ingress StorageGateway
+          FromPort: 1026
+          ToPort: 1031
+          IpProtocol: "tcp"
+
+ # Create required interface endpoints
+  EC2Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.ec2
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  EC2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SSMmessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  KinesisFirehoseEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.kinesis-firehose
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  STSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.sts
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  EC2ImageBuilderEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.imagebuilder
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  #DCM-2566 - CloudWatchMonitoringEndpoint
+  CloudWatchMonitoringEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.monitoring
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  # DCM-2667 - Setup Lambda Endpoints
+  LambdaEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.lambda
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+# KAM-406: Setup StorageGatewayEndpoint on custvalueMgt account
+  StorageGatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.storagegateway
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+# DCM-3029 - Setup CloudWatch Logs Endpoint
+  CloudWatchLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.logs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.secretsmanager
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  AutoscalingEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc1
+      ServiceName: com.amazonaws.ap-southeast-2.autoscaling
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref VpcSubnetTrustedA
+        - !Ref VpcSubnetTrustedB
+        - !Ref VpcSubnetTrustedC
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+
+  IAMRoleEC2:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AccountDescription}-EC2-Role'
+      Description: "IAM role to allow SSM access to EC2 instance"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: "ec2.amazonaws.com"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      Tags:
+        - Key: Name
+          Value: !Sub '${AccountDescription}-EC2-Role'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+
+  CustomPatchBaselineRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: CustomSSMPatchAssociation
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ssm:DescribeEffectivePatchesForPatchBaseline
+                Resource: arn:aws:ssm:*:*:patchbaseline/*
+              - Effect: Allow
+                Action: ssm:GetPatchBaseline
+                Resource: arn:aws:ssm:*:*:patchbaseline/*
+              - Effect: Allow
+                Action: ssm:UpdatePatchBaseline
+                Resource: arn:aws:ssm:*:*:patchbaseline/*
+              - Effect: Allow
+                Action: ssm:RegisterDefaultPatchBaseline
+                Resource: arn:aws:ssm:*:*:patchbaseline/*
+              - Effect: Allow
+                Action: tag:GetResources
+                Resource: "*"
+              - Effect: Allow
+                Action: ssm:DescribePatchBaselines
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:DescribeLogStreams
+                  - logs:CreateLogGroup
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:log-group:/aws/lambda/*
+      RoleName: CustomPatchBaselineRole
+
+  InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: !Sub '${AccountDescription}-EC2-Role'
+      Roles:
+        - !Ref IAMRoleEC2
+    DependsOn: IAMRoleEC2
+
+  IAMRoleQualys:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvName}-${AccountDescription}-EC2-Qualys-SecurityAudit'
+      Description: "IAM Security Audit Role for EC2 Connector for Qualys"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Condition:
+            StringEquals:
+              sts:ExternalId: !Ref 'QualysExternalId'
+          Principal:
+            AWS: "arn:aws:iam::805950163170:root"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/SecurityAudit"
+      Tags:
+        - Key: Name
+          Value: !Sub '${AccountDescription}-EC2C-SecurityAudit'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+
+  # VSS Enabled backup Policy
+  VSSEnabledBackupPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: Policy for VSS Enabled Backup for EC2 Instances
+      Path: /
+      ManagedPolicyName: !Sub '${AccountDescription}-VSS-Backup-Policy'
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Action: ec2:CreateTags
+          Resource:
+            - !Join ["",[!Sub 'arn:aws:ec2:*::snapshot/*']]
+            - !Join ["",[!Sub 'arn:aws:ec2:*::image/*']]
+        - Effect: Allow
+          Action:
+            - 'ec2:DescribeInstances'
+            - 'ec2:CreateSnapshot'
+            - 'ec2:CreateImage'
+            - 'ec2:DescribeImages'
+          Resource: "*"
+      Roles:
+        - !Ref IAMRoleEC2
+
+ # Platform Security Group for common ports
+  PlatformSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc1
+      GroupName: !Sub '${AccountDescription}-Platform-Security-Group'
+      GroupDescription: Platform-Security-Group
+      SecurityGroupIngress:
+        - IpProtocol: icmp
+          FromPort: '-1'
+          ToPort: '-1'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '3389'
+          ToPort: '3389'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.0.0.0/8
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+
+  # Configure VPC Flow Logs
+  Vpc1FlowLogs:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      LogDestination: arn:aws:s3:::924365618754-audit
+      LogDestinationType: s3
+      ResourceId: !Ref 'Vpc1'
+      ResourceType: VPC
+      TrafficType: ALL
+# ------------ NACLs --------------
+  NACLsemiTrusted:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref Vpc1
+      Tags:
+      - Key: Name
+        Value: !Sub '${EnvName}-${AccountDescription}-NACL-semiTrusted'
+      - Key: aws-migration-project-id
+        Value: MPE12884
+  NACLTrusted:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref Vpc1
+      Tags:
+      - Key: Name
+        Value: !Sub '${EnvName}-${AccountDescription}-NACL-Trusted'
+      - Key: aws-migration-project-id
+        Value: MPE12884
+  NACLProtected:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref Vpc1
+      Tags:
+      - Key: Name
+        Value: !Sub '${EnvName}-${AccountDescription}-NACL-Protected'
+      - Key: aws-migration-project-id
+        Value: MPE12884
+  NACLTGW:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref Vpc1
+      Tags:
+      - Key: Name
+        Value: !Sub '${EnvName}-${AccountDescription}-NACL-TGW'
+      - Key: aws-migration-project-id
+        Value: MPE12884
+
+  #--------NACL Subnet Association-----------
+  # Semi-Trusted
+  NACLAssociationSemiTrustedA:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetSemiTrustedA
+       NetworkAclId:
+         Ref: NACLsemiTrusted
+  NACLAssociationSemiTrustedB:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetSemiTrustedB
+       NetworkAclId:
+         Ref: NACLsemiTrusted
+  NACLAssociationSemiTrustedC:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetSemiTrustedC
+       NetworkAclId:
+         Ref: NACLsemiTrusted
+
+  # Trusted
+  NACLAssociationTrustedA:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTrustedA
+       NetworkAclId:
+         Ref: NACLTrusted
+  NACLAssociationTrustedB:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTrustedB
+       NetworkAclId:
+         Ref: NACLTrusted
+  NACLAssociationTrustedC:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTrustedC
+       NetworkAclId:
+         Ref: NACLTrusted
+
+  # Additional Trusted 02 Subnet
+  NACLAssociationTrustedA02:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTrustedA02
+       NetworkAclId:
+         Ref: NACLTrusted
+  NACLAssociationTrustedB02:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTrustedB02
+       NetworkAclId:
+         Ref: NACLTrusted
+  NACLAssociationTrustedC02:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTrustedC02
+       NetworkAclId:
+         Ref: NACLTrusted
+
+  # Protected
+  NACLAssociationProtectedA:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetProtectedA
+       NetworkAclId:
+         Ref: NACLProtected
+  NACLAssociationProtectedB:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetProtectedB
+       NetworkAclId:
+         Ref: NACLProtected
+  NACLAssociationProtectedC:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetProtectedC
+       NetworkAclId:
+         Ref: NACLProtected
+
+  NACLAssociationTGWA:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTGWTrustedA
+       NetworkAclId:
+         Ref: NACLTGW
+  NACLAssociationTGWB:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTGWTrustedB
+       NetworkAclId:
+         Ref: NACLTGW
+  NACLAssociationTGWC:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+       SubnetId:
+         Ref: VpcSubnetTGWTrustedC
+       NetworkAclId:
+         Ref: NACLTGW
+
+#------------NACL Rules TGW----------------
+  InboundNACLTGW1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTGW
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+
+  OutboundNACLTGW1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTGW
+      RuleNumber: 100
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+
+#------------NACL Rules Protected----------------
+  InboundNACLProtected1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/8
+  InboundNACLProtected2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 150
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 52.95.128.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLProtected3:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 200
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.231.248.0/22
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLProtected4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 250
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.5.164.0/22
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLProtected5:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 300
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.231.252.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLProtected6:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 350
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.5.168.0/23
+      PortRange:
+         From: 1024
+         To: 65535
+  # Cmbined rules for AX12
+  InboundNACLProtected7:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 400
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/8
+      PortRange:
+         From: 1433
+         To: 1799
+  InboundNACLProtected8:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 450
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.5.60.81/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLProtected9:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 500
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.5.60.226/32
+      PortRange:
+         From: 1024
+         To: 65535
+  #---CHG0049792---#
+  InboundNACLProtected10:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 550
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.5.60.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLProtected11:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 600
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.77.180.0/26
+  InboundNACLProtected12:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 650
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.8.0.0/16
+      PortRange:
+         From: 0
+         To: 65535
+  # Rule for Kenan DB NFS for DataMigration
+  InboundNACLProtected13:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 700
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.5.44.0/24
+  # Rule for AX12 DataMigration
+  InboundNACLProtected14:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 750
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.8.0.0/13
+      PortRange:
+         From: 59751
+         To: 59751
+  InboundNACLProtected15:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 800
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/8
+      PortRange:
+         From: 3389
+         To: 3389
+  InboundNACLProtected16:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 850
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.8.0.0/13
+      PortRange:
+         From: 1024
+         To: 65535
+  #----CHG0049879---#
+  InboundNACLProtected17:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 900
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.5.40.0/24
+      PortRange:
+         From: 25
+         To: 25
+
+  #----DCM-3041---#
+  InboundNACLProtected19:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1000
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.133.197.51/32
+  #----DCM-3041---#
+  InboundNACLProtected20:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1050
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.77.136.0/24
+  InboundNACLProtected21:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1125
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.77.197.59/32
+      PortRange:
+         From: 0
+         To: 65535
+  InboundNACLProtected22:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1175
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.5.41.217/32
+      PortRange:
+         From: 1691
+         To: 1798
+  InboundNACLProtected23:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1225
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.100.128.0/19
+      PortRange:
+         From: 1651
+         To: 2484
+  InboundNACLProtected24:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1275
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.91.128.0/17
+      PortRange:
+         From: 1651
+         To: 2484
+  InboundNACLProtected25:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1325
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.77.157.238/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLProtected26:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1375
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.150.226.0/18
+      PortRange:
+         From: 1500
+         To: 1800
+  InboundNACLProtected27:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1425
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.134.226.0/18
+      PortRange:
+         From: 1500
+         To: 1800
+  InboundNACLProtected28:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1450
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.77.169.241/32
+      PortRange:
+         From: 7001
+         To: 8800
+  InboundNACLProtected29:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1500
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.22.141.0/17
+  InboundNACLProtected30:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1550
+      Protocol: 6
+      RuleAction: deny
+      CidrBlock: 10.81.0.0/17
+      PortRange:
+         From: 22
+         To: 22
+  InboundNACLProtected31:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1600
+      Protocol: 6
+      RuleAction: deny
+      CidrBlock: 10.83.0.0/17
+      PortRange:
+         From: 22
+         To: 22
+
+  OutboundNACLProtected1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 100
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/8
+  OutboundNACLProtected2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 150
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 52.95.128.0/21
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLProtected3:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 200
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.231.248.0/22
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLProtected4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 250
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.5.164.0/22
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLProtected5:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 300
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.231.252.0/24
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLProtected6:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 350
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.5.168.0/23
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLProtected7:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 400
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.80.0.0/14
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected8:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 450
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.5.40.0/24
+      PortRange:
+         From: 25
+         To: 25
+  OutboundNACLProtected9:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 500
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.5.60.226/32
+      PortRange:
+         From: 1702
+         To: 1702
+  OutboundNACLProtected10:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 550
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.5.60.129/32
+      PortRange:
+         From: 1791
+         To: 1791
+  OutboundNACLProtected11:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 600
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.77.180.0/26
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected12:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 650
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.8.68.0/19
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected13:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 700
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.128.0.0/11
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected14:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 750
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.8.0.0/13
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLProtected15:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 800
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.150.226.0/18
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected16:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 850
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.134.226.0/18
+      PortRange:
+         From: 1024
+         To: 65535
+  # Rule for Kenan DB NFS for DataMigration
+  OutboundNACLProtected17:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 900
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.5.44.0/24
+## ----CHG0048716--#
+  OutboundNACLProtected18:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 950
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.5.10.116/32
+      PortRange:
+         From: 1024
+         To: 65535
+## ----CHG0049652 / CHG0049792---#
+  OutboundNACLProtected19:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 975
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.5.60.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+## ----CHG0050241--#
+  OutboundNACLProtected20:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1000
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.77.181.0/25
+      PortRange:
+         From: 1733
+         To: 1734
+  ## ----CHG0051013--#
+  OutboundNACLProtected21:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1050
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.77.136.0/24
+      PortRange:
+         From: 0
+         To: 65535
+
+  ## ----DCM-3041--#
+  OutboundNACLProtected23:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1150
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.133.197.51/32
+  #----SCTASK0189719---#
+  OutboundNACLProtected24:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1200
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.8.80.0/24
+      PortRange:
+         From: 1521
+         To: 1521
+  OutboundNACLProtected25:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1225
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.133.197.59/32
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLProtected26:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1275
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.5.41.217/32
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected27:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1325
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.134.232.199/32
+      PortRange:
+         From: 1651
+         To: 2484
+  OutboundNACLProtected28:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1375
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.100.128.0/19
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected29:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1400
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.91.128.0/17
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected30:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1450
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.77.157.238/32
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected31:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1475
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.77.89.104/32
+      PortRange:
+         From: 1600
+         To: 1799
+  OutboundNACLProtected32:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1500
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.77.169.241/32
+      PortRange:
+         From: 7001
+         To: 8800
+  OutboundNACLProtected33:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1550
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.112.60.228/29
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLProtected34:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1600
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.22.141.0/17
+  OutboundNACLProtected35:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLProtected
+      RuleNumber: 1650
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.134.234.20/32
+      PortRange:
+         From: 1742
+         To: 1742
+
+#------------NACL Rules Trusted----------------
+  InboundNACLTrusted1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/8
+  InboundNACLTrusted4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 250
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 52.95.128.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted5:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 300
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.231.248.0/22
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted6:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 350
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.5.164.0/19
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted7:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 400
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.231.252.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted8:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 450
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.24.0.0/14
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted11:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 600
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.128.0.0/11
+      PortRange:
+         From: 80
+         To: 80
+  InboundNACLTrusted12:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 650
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.128.0.0/11
+      PortRange:
+         From: 8080
+         To: 8080
+  InboundNACLTrusted13:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 700
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.128.0.0/11
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLTrusted14:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 750
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 99.77.144.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted15:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 800
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 99.150.32.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+
+  InboundNACLTrusted17:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 900
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 172.22.201.0/24
+      PortRange:
+         From: 0
+         To: 65535
+  InboundNACLTrusted18:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 950
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 35.181.150.18/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted19:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1000
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 23.22.154.189/32
+      PortRange:
+         From: 1024
+         To: 65535
+  #--CHG0050366--#
+  InboundNACLTrusted20:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1050
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 136.147.129.33/32
+      PortRange:
+         From: 443
+         To: 443
+  #--CHG0051251--#
+  InboundNACLTrusted21:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1100
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 149.96.89.24/32
+      PortRange:
+         From: 1024
+         To: 65535
+  #--CHG0051463--#
+  InboundNACLTrusted22:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1150
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.104.0.0/14
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted23:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1200
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 52.0.0.0/8
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted24:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1250
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.0.0.0/8
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted25:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1300
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 13.0.0.0/8
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted26:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1350
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 61.9.172.0/23
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted27:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1400
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 144.140.0.0/16
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted28:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1450
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 203.32.0.0/13
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted29:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1500
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 192.29.145.125/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted30:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1550
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 104.98.26.239/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted31:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1600
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 199.36.153.8/30
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted32:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1650
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.100.128.0/19
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLTrusted33:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1700
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 10.91.128.0/17
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLTrusted34:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1750
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 203.21.239.202/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted35:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1800
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 104.89.212.80/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted36:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1850
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 35.71.97.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted37:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1900
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 64.252.104.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted38:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1950
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 15.177.83.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted39:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 2000
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 15.193.3.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted40:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 2050
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 103.91.167.9/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLTrusted41:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 2100
+      Protocol: 6
+      RuleAction: deny
+      CidrBlock: 10.81.0.0/17
+      PortRange:
+         From: 22
+         To: 22
+  InboundNACLTrusted42:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 2150
+      Protocol: 6
+      RuleAction: deny
+      CidrBlock: 10.83.0.0/17
+      PortRange:
+         From: 22
+         To: 22
+  InboundNACLTrusted43:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 2200
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 18.64.0.0/14
+      PortRange:
+         From: 1024
+         To: 65535
+
+  OutboundNACLTrusted1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 100
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/8
+  OutboundNACLTrusted2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 150
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 52.95.128.0/21
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLTrusted3:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 200
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.231.248.0/22
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLTrusted4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 250
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.5.164.0/19
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLTrusted5:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 300
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.231.252.0/24
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLTrusted6:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 350
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.24.0.0/14
+      PortRange:
+         From: 443
+         To: 443
+
+  OutboundNACLTrusted10:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 550
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 172.22.201.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLTrusted11:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 600
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 23.22.154.189/32
+      PortRange:
+         From: 1947
+         To: 8080
+  OutboundNACLTrusted12:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 650
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 35.181.150.18/32
+      PortRange:
+         From: 1947
+         To: 8080
+  ##---CHG0050366---#
+  OutboundNACLTrusted13:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 700
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 136.147.129.33/32
+      PortRange:
+         From: 443
+         To: 443
+  ##---CHG0051251---#
+  OutboundNACLTrusted14:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 750
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 149.96.89.24/32
+      PortRange:
+         From: 443
+         To: 443
+  ##---CHG0051463---#
+  OutboundNACLTrusted15:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 800
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.104.0.0/14
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted16:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 850
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 52.0.0.0/8
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted17:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 900
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.0.0.0/8
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted18:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 950
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 13.0.0.0/8
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted19:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1000
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 61.9.172.0/23
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted20:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1050
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 144.140.0.0/16
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted21:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1100
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 203.32.0.0/13
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted22:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1150
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 192.29.145.125/32
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted23:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1200
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 104.98.26.239/32
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted24:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1250
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 199.36.153.8/30
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted25:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1300
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.100.128.0/19
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLTrusted26:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1350
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.91.128.0/17
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLTrusted27:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1400
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 203.21.239.202/32
+      PortRange:
+         From: 3030
+         To: 3030
+  OutboundNACLTrusted28:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1450
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 104.89.212.80/32
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted29:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1500
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 35.71.97.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted30:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1550
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 64.252.104.0/21
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted31:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1600
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 15.177.83.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted32:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1650
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 15.193.3.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted33:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1700
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 99.77.144.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted34:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1750
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 99.150.32.0/21
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted35:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1800
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 103.91.167.9/32
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLTrusted36:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLTrusted
+      RuleNumber: 1850
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 18.64.0.0/14
+      PortRange:
+         From: 443
+         To: 443
+
+
+
+#------------NACL Rules SemiTrusted----------------
+  InboundNACLSemiTrusted1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/12
+  InboundNACLSemiTrusted2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 150
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.64.0.0/12
+  InboundNACLSemiTrusted3:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 200
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 52.95.128.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 250
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.231.248.0/22
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted5:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 300
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.5.164.0/19
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted6:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 350
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.231.252.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted7:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 400
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.24.0.0/14
+      PortRange:
+         From: 1024
+         To: 65535
+  #----CHG0050366---##
+  InboundNACLSemiTrusted8:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 450
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 136.147.129.33/32
+      PortRange:
+         From: 443
+         To: 443
+  #----CHG0051251---##
+  InboundNACLSemiTrusted9:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 500
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 149.96.89.24/32
+      PortRange:
+         From: 1024
+         To: 65535
+  #----CHG0051463---##
+  InboundNACLSemiTrusted10:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 550
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 3.104.0.0/14
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted11:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 600
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 52.0.0.0/8
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted12:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 650
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 54.0.0.0/8
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted13:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 700
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 13.0.0.0/8
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted14:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 750
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 61.9.172.0/23
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted15:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 800
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 144.140.0.0/16
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted16:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 850
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 203.32.0.0/13
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted17:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 900
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 192.29.145.125/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted18:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 950
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 104.98.26.239/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted19:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1000
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 129.148.156.0/22
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLSemiTrusted20:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1050
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 134.70.92.0/22
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLSemiTrusted21:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1100
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 140.0.0.0/8
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLSemiTrusted22:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1150
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 150.230.8.0/21
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLSemiTrusted23:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1200
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 152.0.0.0/9
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLSemiTrusted24:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1250
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 168.138.96.0/20
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLSemiTrusted25:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1300
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 192.29.0.0/16
+      PortRange:
+         From: 443
+         To: 443
+  InboundNACLSemiTrusted26:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1350
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 203.21.239.202/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted27:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1400
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 104.89.212.80/32
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted28:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1450
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 35.71.97.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted29:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1500
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 64.252.104.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted30:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1550
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 15.177.83.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted31:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1600
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 15.193.3.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted32:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1650
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 99.77.144.0/24
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted33:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1700
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 99.150.32.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+  InboundNACLSemiTrusted34:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1750
+      Protocol: 6
+      RuleAction: deny
+      CidrBlock: 10.81.0.0/17
+      PortRange:
+         From: 22
+         To: 22
+  InboundNACLSemiTrusted35:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1800
+      Protocol: 6
+      RuleAction: deny
+      CidrBlock: 10.83.0.0/17
+      PortRange:
+         From: 22
+         To: 22
+  InboundNACLSemiTrusted36:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1850
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 18.64.0.0/14
+      PortRange:
+         From: 1024
+         To: 65535
+
+  OutboundNACLSemiTrusted1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 100
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/8
+  OutboundNACLSemiTrusted2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 150
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 52.95.128.0/21
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLSemiTrusted3:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 200
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.231.248.0/22
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLSemiTrusted4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 250
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.5.164.0/19
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLSemiTrusted5:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 300
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.231.252.0/24
+      PortRange:
+         From: 0
+         To: 65535
+  OutboundNACLSemiTrusted6:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 350
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.24.0.0/14
+      PortRange:
+         From: 443
+         To: 443
+  #--CHG0050366---#
+  OutboundNACLSemiTrusted7:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 400
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 136.147.129.33/32
+      PortRange:
+         From: 443
+         To: 443
+  #--CHG0050366---#
+  OutboundNACLSemiTrusted8:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 450
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 149.96.89.24/32
+      PortRange:
+         From: 443
+         To: 443
+  #----CHG0051463---#
+  OutboundNACLSemiTrusted9:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 500
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 3.104.0.0/14
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted10:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 550
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 52.0.0.0/8
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted11:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 600
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 54.0.0.0/8
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted12:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 650
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 13.0.0.0/8
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted13:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 700
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 61.9.172.0/23
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted14:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 750
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 144.140.0.0/16
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted15:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 800
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 203.32.0.0/13
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted16:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 850
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 192.29.145.125/32
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted17:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 900
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 104.98.26.239/32
+      PortRange:
+         From: 443
+         To: 443
+  #---DCM-2996--#
+  OutboundNACLSemiTrusted18:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 950
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 129.148.156.0/22
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLSemiTrusted19:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1000
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 134.70.92.0/22
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLSemiTrusted20:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1050
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 140.0.0.0/8
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLSemiTrusted21:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1100
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 150.230.8.0/21
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLSemiTrusted22:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1150
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 152.0.0.0/9
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLSemiTrusted23:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1200
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 168.138.96.0/20
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLSemiTrusted24:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1250
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 192.29.0.0/16
+      PortRange:
+         From: 1024
+         To: 65535
+  OutboundNACLSemiTrusted25:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1300
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 203.21.239.202/32
+      PortRange:
+         From: 3030
+         To: 3030
+  OutboundNACLSemiTrusted26:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1350
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 104.89.212.80/32
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted27:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1400
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 35.71.97.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted28:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1450
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 64.252.104.0/21
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted29:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1500
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 15.177.83.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted30:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1550
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 15.193.3.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted31:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1600
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 99.77.144.0/24
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted32:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1650
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 99.150.32.0/21
+      PortRange:
+         From: 443
+         To: 443
+  OutboundNACLSemiTrusted33:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NACLsemiTrusted
+      RuleNumber: 1700
+      Protocol: 6
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 18.64.0.0/14
+      PortRange:
+         From: 443
+         To: 443
+
+# -- Outputs --
+Outputs:
+  PatchbaselineroleArn:
+    Description: Custom patch baseline role Arn
+    Value: !GetAtt CustomPatchBaselineRole.Arn
+    Export:
+      Name: CustomPatchBaselineRole-Arn
