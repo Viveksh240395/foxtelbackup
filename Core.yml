@@ -1,0 +1,1241 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "This template builds the Linux based infrastructure for
+Sit1 Core Application"
+Parameters:
+  EnvName:
+    Description: Environment Name
+    Type: String
+    AllowedValues:
+      - sit2
+      - nonp
+      - sit1
+      - prod
+    Default: sit2
+  ProjectName:
+    Type: String
+    Default: 'KAM'
+    Description: Must - Project name is must.
+  ServiceName:
+    Type: String
+    Default: 'wp-wlh'
+    Description: Must - Service name is must.
+  SecurityDomain:
+    Type: String
+    Default: trusted
+  VPCID:
+    Type: String
+    Description: Specify the VPC ID
+    Default: "vpc-0255bd3439fa90b2a"
+  SubnetIDs:
+    Description: List Subnet IDs
+    Type: CommaDelimitedList
+    Default: "subnet-03807909fae818b9b,subnet-074d414f494e11068,subnet-0e044498c18653eab"
+  InstanceAMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: 'Specify the input AMI ID'
+    AllowedValues:
+      - Kenan-Ami-Rhel7-Core
+      - 758013384611-AMI-Sit1Core01
+      - 758013384611-AMI-Sit1Core02
+      - 758013384611-AMI-Sit1Core03
+      - 758013384611-AMI-Sit1Core04
+      - 666761109297-AMI-ProdCore
+    Default: 758013384611-AMI-Sit1Core01
+
+  AMIVersion:
+    Type: String
+    Description: "The semantic version of the AMI.Eg: 1.0.0. You must update this version everytime when there's a change in AMI ID.Start with 0.0.1"
+    AllowedPattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+    Default: 0.0.1
+  ELBLogLocation:
+    Type: String
+    Description: "S3 path where ELB logs are stored"
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: Specify instance type
+  InstanceKeyName:
+    Type: String
+    Default: ENI-Test-Key
+  Domain:
+    Type: String
+    Description: Domain Name
+    AllowedValues:
+      - sms.foxtel.com.au
+      - ent.foxtel.com.au
+    Default: sms.foxtel.com.au
+  DomainAdmin:
+    Type: String
+    Description: AD user with Doman Join Admin privilage
+    AllowedValues:
+      - svc-aws-linux-join
+    Default: svc-aws-linux-join
+  DomainController:
+    Type: String
+    Description: Any AWS Domain Controller FQDN
+    AllowedValues:
+      - awsdc00.ent.foxtel.com.au
+      - awsdc01.ent.foxtel.com.au
+    Default: awsdc00.ent.foxtel.com.au
+  HostnamePrefix:
+    Type: String
+    Description: Hostname Prefix for WorkPoint Application
+    Default: awssit1wp
+  Domain:
+    Type: String
+    Description: Domain Name
+    AllowedValues:
+      - sms.foxtel.com.au
+      - ent.foxtel.com.au
+    Default: sms.foxtel.com.au
+  awsmigrationproject:
+    Type: String
+    Description: aws map project id
+    Default: MPE12884
+  mapmigrated:
+    Type: String
+    Description: aws map server id
+  InfraSupportEMail:
+    Description: Infrastructure group email address to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)"
+    ConstraintDescription: "must be a valid email address."
+    Default: "Sainu.daniel@foxtel.com.au"
+  ApplicationSupportEMail:
+    Description: Application group email address  to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)"
+    ConstraintDescription: "must be a valid email address."
+    Default: "Sainu.daniel@foxtel.com.au"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "General Configuration"
+        Parameters:
+          - EnvName
+          - VPCID
+          - SubnetIDs
+          - SecurityDomain
+          - InstanceKeyName
+          - ProjectName
+          - awsmigrationproject
+          - InfraSupportEMail
+          - ApplicationSupportEMail
+      -
+        Label:
+          default: "Core Specific"
+        Parameters:
+          - InstanceAMI
+          - InstanceType
+          - HostnamePrefix
+          - mapmigrated
+          - ServiceName
+
+    ParameterLabels:
+      EnvName:
+        default: "Environment Tag"
+
+Resources:
+# ---------------Instance Profiles--------------------------
+ # Instance Profile
+  EC2Profile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2Role']
+
+  # IAM Role For EC2s
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvName}-${ServiceName}-EC2-Role'
+      Description: !Sub "IAM role that allows SSM access to ' ${EnvName} ${ServiceName}' EC2 instance"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: "ec2.amazonaws.com"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        - "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+        - "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/CloudWatchFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+      Tags:
+        - Key: Name
+          Value: !Sub '${ServiceName}-EC2-Role'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+
+  KMSPolicyForEC2Role:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: !Sub '${EnvName}-${ServiceName}-EBS-KMS-Policy'
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+         - Effect: Allow
+           Action:
+             - kms:Decrypt
+             - kms:DescribeKey
+             - kms:Encrypt
+             - kms:GenerateDataKey*
+             - kms:ReEncrypt*
+           Resource: '*'
+      Roles:
+         - !Ref EC2Role
+
+  KMSReEncryptCrossAccount:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: !Sub '${EnvName}-${ServiceName}-EBS-KMS-ReEncrypy-Policy'
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+         - Effect: Allow
+           Action:
+             - kms:Decrypt
+             - kms:DescribeKey
+             - kms:Encrypt
+             - kms:GenerateDataKey*
+             - kms:ReEncrypt*
+           Resource: 'arn:aws:kms:ap-southeast-2:616143778897:key/d030f13b-3464-4cf3-9c85-e40157e0282e'
+      Roles:
+         - !Ref EC2Role
+
+  FirehoseCrossAccountSTSAssumeRolePolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: !Sub '${EnvName}-${ServiceName}-Firehose-AssumeRolePolicy'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Resource:
+              - arn:aws:iam::616143778897:role/KinesisFirehoseCrossAccountRole
+              - arn:aws:iam::758013384611:role/FirehoseCrossAccountSTSAssumeRole
+              - arn:aws:iam::666761109297:role/FirehoseCrossAccountSTSAssumeRole
+      Roles:
+         - !Ref EC2Role
+
+  Ec2MetatdataKinesisFirehosePolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: !Sub '${EnvName}-${ServiceName}-EC2-MetadataPolicy'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Version: '2012-10-17'
+        Statement:
+         - Effect: Allow
+           Action:
+             - firehose:PutRecord
+             - firehose:PutRecordBatch
+           Resource:
+             - arn:aws:firehose:ap-southeast-2:616143778897:*
+             -  "*"
+         - Effect: Allow
+           Action:
+             - ec2:DescribeTags
+             - ec2:DescribeInstances
+             - ec2:DescribeInstanceAttribute
+             - ec2:DescribeInstanceTypes
+             - ec2:DescribeInstanceStatus
+           Resource: "*"
+         - Sid: VisualEditor1
+           Effect: Allow
+           Action: cloudwatch:PutMetricData
+           Resource: "*"
+      Roles:
+         - !Ref EC2Role
+
+ # ---------------Security Groups--------------------------
+ # ALB Security Group
+  ALBSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${EnvName}-${ServiceName}-ALB-SG'
+      GroupName : !Sub '${EnvName}-${ServiceName}-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.55.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.7.55.0/24
+          Description: collins LAN
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.81.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.80.0/23
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.77.176.0/22
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.82.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.83.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.150.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.143.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.18.80.0/24
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7006'
+          ToPort: '7006'
+          CidrIp: 10.77.136.0/24
+          Description: "controlM to core"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.112.60.0/24
+          Description: 'Citrix to core'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.22.128.0/17
+          Description: "Pulse Secure Vlan141"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.134.192.0/18
+          Description: "VDI vlan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.150.192.0/18
+          Description: "VDI vlan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7004'
+          CidrIp: 10.77.209.172/32
+          Description: "dev jenkin agent"
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.0.0.0/8
+          Description: "Agent access: Cidr to be updated"
+
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.7.0.0/17
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.3.110.0/24
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.12.0.0/16
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.7.0.0/17
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.3.110.0/24
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.12.0.0/16
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.134.232.0/24
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.134.234.0/23
+          Description: 'TCS Vdi'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.134.232.0/24
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.134.234.0/23
+          Description: 'TCS Vdi'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.77.93.0/25
+          Description: 'citrix core to prod'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.77.93.0/25
+          Description: 'citrix core to prod'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.77.180.0/22
+          Description: 'nonp PTest ASG'
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+ # EC2 Instances Security Group
+  EC2SG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${EnvName}-${ServiceName}-SG'
+      GroupName : !Sub '${EnvName}-${ServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.55.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.81.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.80.0/23
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.77.176.0/22
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.82.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.83.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.150.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.143.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.18.80.0/24
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7006'
+          ToPort: '7006'
+          CidrIp: 10.77.136.0/24
+          Description: "controlM to core"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7101'
+          CidrIp: 10.134.234.0/23
+          Description: 'new rdp vm'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.134.234.0/23
+          Description: 'new rdp vm'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+      VpcId: !Ref 'VPCID'
+  # ----------------SNS Notifications-----------------
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref InfraSupportEMail
+          Protocol: email
+        - Endpoint: !Ref ApplicationSupportEMail
+          Protocol: email
+      TopicName: !Sub '${EnvName}-${ServiceName}-ASG-Topic'
+
+
+  # ----------------Elastic Load Balancers------------
+  # CSS Certificate
+  CoreCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: csrportal.foxtel.com.au
+      SubjectAlternativeNames:
+        - 'prod.csrportal.foxtel.com.au'
+      ValidationMethod: EMAIL
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+
+
+  # Application LoadBalancer
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${ServiceName}-ALB
+      SecurityGroups:
+        - !Ref ALBSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+        - Key: access_logs.s3.enabled
+          Value: true
+        - Key: access_logs.s3.bucket
+          Value: !Ref ELBLogLocation
+        - Key: access_logs.s3.prefix
+          Value: !Sub '${EnvName}-${ServiceName}-ELB-Logs'
+        - Key: idle_timeout.timeout_seconds
+          Value: 1800
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref SubnetIDs]
+        - !Select [1, !Ref SubnetIDs]
+        - !Select [2, !Ref SubnetIDs]
+  # Listener & TGs  -- Core
+
+  ListenerHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - Alb
+    Properties:
+      Certificates:
+        - !Ref CoreCertificate
+      DefaultActions:
+        - Type: "redirect"
+          RedirectConfig:
+            Protocol: "HTTPS"
+            Port: 7001
+            StatusCode: "HTTP_301"
+      LoadBalancerArn: !Ref Alb
+      Port: "443"
+      Protocol: "HTTPS"
+
+  Listener7001:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - Alb
+    Properties:
+      Certificates:
+        - !Ref CoreCertificate
+      DefaultActions:
+        - Type: "fixed-response"
+          FixedResponseConfig:
+             ContentType: text/plain
+             MessageBody: "Nice Try.You've reached CORE, but not matched any acceptance criteria. Try the luck next time"
+             StatusCode: 200
+      LoadBalancerArn: !Ref Alb
+      Port: "7001"
+      Protocol: "HTTPS"
+
+  OSSListenerRule1:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref OSSTargetGroup
+      Conditions:
+        - Field: source-ip
+          SourceIpConfig:
+            Values:
+            - "10.8.168.0/21"
+            - "10.112.60.0/24"
+            - "10.134.192.0/20"
+            - "10.134.227.0/24"
+            - "10.134.228.0/24"
+
+      ListenerArn: !Ref Listener7001
+      Priority: 1
+
+  OSSListenerRule2:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref OSSTargetGroup
+      Conditions:
+        - Field: source-ip
+          SourceIpConfig:
+            Values:
+            - "10.150.192.0/20"
+            - "10.150.227.0/24"
+            - "10.150.228.0/24"
+
+      ListenerArn: !Ref Listener7001
+      Priority: 2
+
+  MPRListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref MPRTargetGroup
+      Conditions:
+        - Field: source-ip
+          SourceIpConfig:
+            Values:
+            - "10.0.0.0/8"
+      ListenerArn: !Ref Listener7001
+      Priority: 3
+
+  OSSTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-OSS-TG'
+      HealthCheckPath: "/"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 7001
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "1800"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+
+  MPRTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-MPR-TG'
+      HealthCheckPath: "/"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 7001
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "1800"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+
+  # ---------------------------KMS Key ----------------------------------
+  EBSKmsKeyId:
+     Type: AWS::KMS::Key
+     Properties:
+       Description: KMS Key ID for EBS volume encryption of Instances
+       KeySpec: SYMMETRIC_DEFAULT
+       KeyUsage: ENCRYPT_DECRYPT
+       KeyPolicy:
+         Version: '2012-10-17'
+         Id: key-default-1
+         Statement:
+         - Sid: Enable IAM User Permissions
+           Effect: Allow
+           Principal:
+             AWS:
+             - !Sub "arn:aws:iam::${AWS::AccountId}:root"
+           Action: kms:*
+           Resource: '*'
+         - Sid: Allow administration of the key
+           Effect: Allow
+           Principal:
+             AWS:
+             - !Sub "arn:aws:iam::${AWS::AccountId}:role/Prod-CustValueMgt-Cloud-Engineer"
+           Action:
+           - kms:Create*
+           - kms:Describe*
+           - kms:Enable*
+           - kms:List*
+           - kms:Put*
+           - kms:Update*
+           - kms:Revoke*
+           - kms:Disable*
+           - kms:Get*
+           - kms:Delete*
+           - kms:ScheduleKeyDeletion
+           - kms:CancelKeyDeletion
+           Resource: '*'
+         - Sid: Allow use of the key
+           Effect: Allow
+           Principal:
+             AWS:
+             - !Sub "arn:aws:iam::${AWS::AccountId}:role/Prod-CustValueMgt-Cloud-Engineer"
+             - !Sub "arn:aws:iam::${AWS::AccountId}:root"
+             - !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+           Action:
+           - kms:Encrypt
+           - kms:Decrypt
+           - kms:ReEncrypt*
+           - kms:GenerateDataKey*
+           - kms:DescribeKey
+           - kms:Sign
+           - kms:Verify
+           - kms:DescribeKey
+           Resource: '*'
+
+         - Sid: Allow attachment of persistent resources
+           Effect: Allow
+           Principal:
+             AWS:
+             - !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+
+           Action:
+           - kms:CreateGrant
+           Resource: "*"
+           Condition:
+             Bool:
+               kms:GrantIsForAWSResource: true
+
+  EBSKmsKeyIdAlias:
+     Type: 'AWS::KMS::Alias'
+     Properties:
+       AliasName: !Sub 'alias/${EnvName}-${ServiceName}-EbsAmiKmsKeyId'
+       TargetKeyId: !Ref EBSKmsKeyId
+
+  # ---------Autoscaling Group and Launch Templates--------
+  # Auto Scaling Group - OSS
+  OSSASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${EnvName}-${ServiceName}-OSS-ASG'
+      MinSize: "5"
+      MaxSize: "9"
+      DesiredCapacity: "7"
+      HealthCheckType: "ELB"
+      HealthCheckGracePeriod: 600
+      LaunchTemplate:
+        LaunchTemplateId: !Ref OSSLaunchTemplate
+        Version: !GetAtt OSSLaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier:
+        - !Select [0, !Ref SubnetIDs]
+        - !Select [1, !Ref SubnetIDs]
+        - !Select [2, !Ref SubnetIDs]
+      MetricsCollection:
+        - Granularity: "1Minute"
+          Metrics:
+            - "GroupMinSize"
+            - "GroupMaxSize"
+      TargetGroupARNs:
+          - !Ref OSSTargetGroup
+      NotificationConfiguration:
+        TopicARN: !Ref NotificationTopic
+        NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          - autoscaling:EC2_INSTANCE_TERMINATE
+          - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvName
+          PropagateAtLaunch: "true"
+        - Key: TG-Name
+          Value: !Sub '${EnvName}-${ServiceName}-OSS-ASG'
+          PropagateAtLaunch: "true"
+        - Key: Purpose
+          Value: !Sub '${EnvName}-${ServiceName}-OSS-ASG'
+          PropagateAtLaunch: "false"
+
+  MPRASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${EnvName}-${ServiceName}-MPR-ASG'
+      MinSize: "2"
+      MaxSize: "3"
+      DesiredCapacity: "2"
+      HealthCheckType: "ELB"
+      HealthCheckGracePeriod: 600
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MPRLaunchTemplate
+        Version: !GetAtt MPRLaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier:
+        - !Select [0, !Ref SubnetIDs]
+        - !Select [1, !Ref SubnetIDs]
+        - !Select [2, !Ref SubnetIDs]
+      MetricsCollection:
+        - Granularity: "1Minute"
+          Metrics:
+            - "GroupMinSize"
+            - "GroupMaxSize"
+      TargetGroupARNs:
+          - !Ref MPRTargetGroup
+      NotificationConfiguration:
+        TopicARN: !Ref NotificationTopic
+        NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          - autoscaling:EC2_INSTANCE_TERMINATE
+          - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvName
+          PropagateAtLaunch: "true"
+        - Key: TG-Name
+          Value: !Sub '${EnvName}-${ServiceName}-MPR-ASG'
+          PropagateAtLaunch: "true"
+        - Key: Purpose
+          Value: !Sub '${EnvName}-${ServiceName}-MPR-ASG'
+          PropagateAtLaunch: "false"
+
+  # Launch Template
+  MPRLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${EnvName}-${ServiceName}-MPR-launch-template'
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt EC2Profile.Arn
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 20
+              VolumeType: gp3
+              DeleteOnTermination: true
+              Encrypted: true
+              KmsKeyId: !Ref EBSKmsKeyId
+          - DeviceName:  /dev/sdf
+            Ebs:
+              VolumeType: gp3
+              VolumeSize: 35
+              DeleteOnTermination: true
+              Encrypted: true
+              KmsKeyId: !Ref EBSKmsKeyId
+        InstanceType: !Ref InstanceType
+        ImageId: !Ref InstanceAMI
+        KeyName: !Ref InstanceKeyName
+        Monitoring:
+          Enabled: true
+        SecurityGroupIds:
+          - !Ref EC2SG
+        TagSpecifications:
+        - ResourceType: instance
+          Tags:
+          - Key: Name
+            Value: !Sub '${EnvName}-${ServiceName}-MPR'
+          - Key: foxtel:sox-scope
+            Value: true
+        MetadataOptions:
+          HttpTokens: required
+
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            # Set Hostname
+            hostname_prefix='${HostnamePrefix}'
+            domain='${Domain}'
+            TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+            hostname=$hostname_prefix$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id| tail -c 3)
+            hostnamectl set-hostname $hostname.$domain
+
+            # Take backup of resolv.conf & hosts file
+            cp -rp /etc/resolv.conf /etc/resolv.conf.orig
+            cp -rp /etc/hosts /etc/hosts.orig
+            # Add DC details in resolv.conf & hosts
+            sed -i "s/^nameserver.*/nameserver 10.77.114.21/" /etc/resolv.conf
+            echo "10.77.114.21 awsdc00.ent.foxtel.com.au" >> /etc/hosts
+
+            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+
+            # Join domain
+            /usr/local/bin/aws secretsmanager get-secret-value --secret-id Linux/AD/join --query SecretString --output text | awk -F\" '{print $4}' | realm join --computer-ou="OU=AWS,OU=Linux,OU=Servers,DC=ent,DC=foxtel,DC=com,DC=au" -U '${DomainAdmin}' '${DomainController}' -v >> /var/tmp/out.txt 2>&1
+            /usr/sbin/authconfig --enablefaillock --update
+            cp -rp /etc/sssd/sssd.conf.sample /etc/sssd/sssd.conf
+            systemctl restart sssd
+
+            # Revert the changes made in resolv.conf & hosts file and add search domains in resolv.conf
+            cp -rp /etc/hosts.orig /etc/hosts
+            cp -rp /etc/resolv.conf.orig /etc/resolv.conf
+            sed -i "s/^search.*/search aws.foxtel.internal ent.foxtel.com.au sms.foxtel.com.au/" /etc/resolv.conf
+            chattr +i /etc/resolv.conf
+
+            # Update SSH config to allow password auth
+            sed -i 's/^ssh_pwauth.*/ssh_pwauth: 1/' /etc/cloud/cloud.cfg
+            sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            sed -i '/^AllowGroups/ s/$/ gs-tcskenanadminaccess@ent.foxtel.com.au/' /etc/ssh/sshd_config
+            systemctl restart sshd
+            systemctl restart rsyslog
+
+            #Postfix for email
+            grep ^relayhost /etc/postfix/main.cf && sed -i "s/^relayhost = .*/relayhost = sydney.foxtel.com.au/" /etc/postfix/main.cf || sed -i '/^#relayhost = $mydomain/a relayhost = sydney.foxtel.com.au' /etc/postfix/main.cf
+            systemctl restart postfix
+
+            # Update Kinesis agnet.json
+            /sbin/usermod -G adm,cbsgroup aws-kinesis-agent-user
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/Kinesis-Agent/log4j.xml /etc/aws-kinesis/log4j.xml
+            chmod 644 /etc/aws-kinesis/log4j.xml
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/Kinesis-Agent/Prod/Core/agent.json /etc/aws-kinesis/agent.json
+            chmod 644 /etc/aws-kinesis/agent.json; systemctl restart aws-kinesis-agent
+
+            # Update ControlM Authorized Server for production Only
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Scripts/ctmagent_change/ctmagent_change /home/ctmagent/ctmagent_change
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Scripts/ctmagent_change/ctmagent_change_master.sh /home/ctmagent/ctmagent_change_master.sh
+            yum install expect -y
+            chmod 750 /home/ctmagent/ctmagent_change
+            chmod 750 /home/ctmagent/ctmagent_change_master.sh
+            bash /home/ctmagent/ctmagent_change_master.sh
+            systemctl restart ctmagent
+
+            # cloudwatchFS
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/ASGCWscripts/prod/config.json /opt/aws/amazon-cloudwatch-agent/bin/config.json
+            sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/ASGCWscripts/prod/Core.sh /opt/aws/Core.sh
+            sudo sh /opt/aws/Core.sh
+
+            #splunk config
+            hostname=`hostname`
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/splunk/CORE/output.conf /opt/splunkforwarder/etc/system/local/outputs.conf
+            chown splunk:splunk /opt/splunkforwarder/etc/system/local/outputs.conf
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/splunk/CORE/MPR/inputs.conf /opt/splunkforwarder/etc/system/local/inputs.conf
+            chown splunk:splunk /opt/splunkforwarder/etc/system/local/inputs.conf
+            echo "[general]" > /opt/splunkforwarder/etc/instance.cfg
+            sed -i "s/^host.*/host = $hostname/" /opt/splunkforwarder/etc/system/local/inputs.conf
+            systemctl enable splunk ; systemctl start splunk
+            #Splunk Core Logs Cron
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/splunk/CORE/splunk_log.sh /var/splunk/splunk_log.sh
+            chown splunk /var/splunk/splunk_log.sh
+            chmod 750 /var/splunk/splunk_log.sh
+            crontab -l >cronfile
+            echo "* 0-23 * * * /var/splunk/splunk_log.sh" >> cronfile
+            crontab cronfile
+            systemctl restart crond
+
+            # CORE Bootstrap
+            mkdir -m 755 -p /opt/staging/scripts/bootstrap/
+            chown cbsuser:cbsgroup /opt/staging/scripts/bootstrap/
+
+            # Download CORE Bootstrap scripts
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Software/Application/CORE_Installers/Bootstrap/core_bootstrap_prod.sh /opt/staging/scripts/bootstrap/core_bootstrap.sh
+
+            # Run CORE Bootstrap scripts
+            sh /opt/staging/scripts/bootstrap/core_bootstrap.sh
+
+            #Start Core App
+            sudo -u cbsuser sh /opt/staging/scripts/app_start.sh
+            
+            #UAR Script
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/uar_script/uar-prod.sh /var/tmp/uar-prod.sh
+            chmod 755 /var/tmp/uar-prod.sh
+            sudo sh /var/tmp/uar-prod.sh
+
+
+  # Launch Template for OSS Instances.
+  OSSLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${EnvName}-${ServiceName}-OSS-launch-template'
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt EC2Profile.Arn
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 20
+              VolumeType: gp3
+              DeleteOnTermination: true
+              Encrypted: true
+              KmsKeyId: !Ref EBSKmsKeyId
+          - DeviceName:  /dev/sdf
+            Ebs:
+              VolumeType: gp3
+              VolumeSize: 35
+              DeleteOnTermination: true
+              Encrypted: true
+              KmsKeyId: !Ref EBSKmsKeyId
+        InstanceType: !Ref InstanceType
+        ImageId: !Ref InstanceAMI
+        KeyName: !Ref InstanceKeyName
+        Monitoring:
+          Enabled: true
+        SecurityGroupIds:
+          - !Ref EC2SG
+        TagSpecifications:
+        - ResourceType: instance
+          Tags:
+          - Key: Name
+            Value: !Sub '${EnvName}-${ServiceName}-OSS'
+          - Key: foxtel:sox-scope
+            Value: true
+        MetadataOptions:
+          HttpTokens: required
+
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            # Set Hostname
+            hostname_prefix='${HostnamePrefix}'
+            domain='${Domain}'
+            TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+            hostname=$hostname_prefix$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id| tail -c 3)
+            hostnamectl set-hostname $hostname.$domain
+
+            # Take backup of resolv.conf & hosts file
+            cp -rp /etc/resolv.conf /etc/resolv.conf.orig
+            cp -rp /etc/hosts /etc/hosts.orig
+            # Add DC details in resolv.conf & hosts
+            sed -i "s/^nameserver.*/nameserver 10.77.114.21/" /etc/resolv.conf
+            echo "10.77.114.21 awsdc00.ent.foxtel.com.au" >> /etc/hosts
+
+            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+
+            # Join domain
+            /usr/local/bin/aws secretsmanager get-secret-value --secret-id Linux/AD/join --query SecretString --output text | awk -F\" '{print $4}' | realm join --computer-ou="OU=AWS,OU=Linux,OU=Servers,DC=ent,DC=foxtel,DC=com,DC=au" -U '${DomainAdmin}' '${DomainController}' -v >> /var/tmp/out.txt 2>&1
+            /usr/sbin/authconfig --enablefaillock --update
+            cp -rp /etc/sssd/sssd.conf.sample /etc/sssd/sssd.conf
+            systemctl restart sssd
+
+            # Revert the changes made in resolv.conf & hosts file and add search domains in resolv.conf
+            cp -rp /etc/hosts.orig /etc/hosts
+            cp -rp /etc/resolv.conf.orig /etc/resolv.conf
+            sed -i "s/^search.*/search aws.foxtel.internal ent.foxtel.com.au sms.foxtel.com.au/" /etc/resolv.conf
+            chattr +i /etc/resolv.conf
+
+            # Update SSH config to allow password auth
+            sed -i 's/^ssh_pwauth.*/ssh_pwauth: 1/' /etc/cloud/cloud.cfg
+            sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            sed -i '/^AllowGroups/ s/$/ gs-tcskenanadminaccess@ent.foxtel.com.au/' /etc/ssh/sshd_config
+            systemctl restart sshd
+            systemctl restart rsyslog
+
+            #Postfix for email
+            grep ^relayhost /etc/postfix/main.cf && sed -i "s/^relayhost = .*/relayhost = sydney.foxtel.com.au/" /etc/postfix/main.cf || sed -i '/^#relayhost = $mydomain/a relayhost = sydney.foxtel.com.au' /etc/postfix/main.cf
+            systemctl restart postfix
+
+            # Update Kinesis agnet.json
+            /sbin/usermod -G adm,cbsgroup aws-kinesis-agent-user
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/Kinesis-Agent/log4j.xml /etc/aws-kinesis/log4j.xml
+            chmod 644 /etc/aws-kinesis/log4j.xml
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/Kinesis-Agent/Prod/Core/agent.json /etc/aws-kinesis/agent.json
+            chmod 644 /etc/aws-kinesis/agent.json; systemctl restart aws-kinesis-agent
+
+            # Update ControlM Authorized Server for production Only
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Scripts/ctmagent_change/ctmagent_change /home/ctmagent/ctmagent_change
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Scripts/ctmagent_change/ctmagent_change_master.sh /home/ctmagent/ctmagent_change_master.sh
+            yum install expect -y
+            chmod 750 /home/ctmagent/ctmagent_change
+            chmod 750 /home/ctmagent/ctmagent_change_master.sh
+            bash /home/ctmagent/ctmagent_change_master.sh
+            systemctl restart ctmagent
+
+            # cloudwatchFS
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/ASGCWscripts/prod/config.json /opt/aws/amazon-cloudwatch-agent/bin/config.json
+            sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/ASGCWscripts/prod/Core.sh /opt/aws/Core.sh
+            sudo sh /opt/aws/Core.sh
+
+            #splunk config
+            hostname=`hostname`
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/splunk/CORE/output.conf /opt/splunkforwarder/etc/system/local/outputs.conf
+            chown splunk:splunk /opt/splunkforwarder/etc/system/local/outputs.conf
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/splunk/CORE/OSS/inputs.conf /opt/splunkforwarder/etc/system/local/inputs.conf
+            chown splunk:splunk /opt/splunkforwarder/etc/system/local/inputs.conf
+            echo "[general]" > /opt/splunkforwarder/etc/instance.cfg
+            sed -i "s/^host.*/host = $hostname/" /opt/splunkforwarder/etc/system/local/inputs.conf
+            systemctl enable splunk ; systemctl start splunk
+
+            #Splunk Core Logs Cron
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Configurations/splunk/CORE/splunk_log.sh /var/splunk/splunk_log.sh
+            chown splunk /var/splunk/splunk_log.sh
+            chmod 750 /var/splunk/splunk_log.sh
+            crontab -l >cronfile
+            echo "* 0-23 * * * /var/splunk/splunk_log.sh" >> cronfile
+            crontab cronfile
+            systemctl restart crond
+
+            # CORE Bootstrap
+            mkdir -m 755 -p /opt/staging/scripts/bootstrap/
+            chown cbsuser:cbsgroup /opt/staging/scripts/bootstrap/
+
+            # Download CORE Bootstrap scripts
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/Software/Application/CORE_Installers/Bootstrap/core_bootstrap_prod.sh /opt/staging/scripts/bootstrap/core_bootstrap.sh
+
+            # Run CORE Bootstrap scripts
+            sh /opt/staging/scripts/bootstrap/core_bootstrap.sh
+
+            #Start Core App
+            sudo -u cbsuser sh /opt/staging/scripts/app_start.sh
+
+            #UAR Script
+            /usr/local/bin/aws s3 cp s3://foxtel-image-builder-np/uar_script/uar-prod.sh /var/tmp/uar-prod.sh
+            chmod 755 /var/tmp/uar-prod.sh
+            sudo sh /var/tmp/uar-prod.sh
+            
+  # ------------Scaling Policies--------------------
+  # WorkPoint Policies
+#  WorkPointScaleUpPolicy:
+#    Type: AWS::AutoScaling::ScheduledAction
+#    Properties:
+#      AutoScalingGroupName: !Ref WorkPointASG
+#      DesiredCapacity: 3
+#      MaxSize: 4
+#      MinSize: 1
+#      TimeZone: "Australia/Sydney"
+#      Recurrence: "0 9 * * *"
+#  WorkPointScaleDownPolicy:
+#    Type: AWS::AutoScaling::ScheduledAction
+#    Properties:
+#      AutoScalingGroupName: !Ref WorkPointASG
+#      DesiredCapacity: 1
+#      MaxSize: 1
+#      MinSize: 1
+#      TimeZone: "Australia/Sydney"
+#      Recurrence: "0 17 * * *"
+
+  # WorklistHandler Policies
+#  WorklistHandlerScaleUpPolicy:
+#    Type: AWS::AutoScaling::ScheduledAction
+#    Properties:
+#      AutoScalingGroupName: !Ref WorklistHandlerASG
+#      DesiredCapacity: 2
+#      MaxSize: 3
+#      MinSize: 1
+#      TimeZone: "Australia/Sydney"
+#      Recurrence: "0 9 * * *"
+  #WorklistHandlerScaleDownPolicy:
+#    Type: AWS::AutoScaling::ScheduledAction
+#    Properties:
+#      AutoScalingGroupName: !Ref WorklistHandlerASG
+#      DesiredCapacity: 1
+#      MaxSize: 1
+#      MinSize: 1
+#      TimeZone: "Australia/Sydney"
+#      Recurrence: "0 17 * * *"
+  #-------Monitoring-------#
+  ProdCore:
+    Type: AWS::SNS::Topic
+    Properties:
+  #    KmsMasterKeyId: alias/aws/sns
+      Subscription:
+        - Endpoint: "KenanPlatformEngineering@foxtel.com.au"
+          Protocol: "email"
+        - Endpoint: "TCSDataCentreOperations@foxtel.com.au"
+          Protocol: "email"
+        - Endpoint: "ciolinuxadmin@foxtel.com.au"
+          Protocol: "email"
+        - Endpoint: "TCSAppsManagement@foxtel.com.au"
+          Protocol: "email"
+        - Endpoint: "cloudoperationsupport@foxtel.com.au"
+          Protocol: "email"
+      TopicName: Prod-Core
+# Export ALB details to be used with other CORE stacks
+Outputs:
+  Ec2SGID:
+    Description: EC2 Security Grp
+    Value: !Ref EC2SG
+    Export:
+      Name: !Join ['-',[!Sub '${EnvName}-${ServiceName}-EC2SG', 'ID']]
+  ALBArn:
+    Description: ALB ARN
+    Value: !Ref Alb
+    Export:
+      Name: !Join ['-',[!Sub '${EnvName}-${ServiceName}-ALB', 'ARN']]
+  CertificateArn:
+    Description: Certificate ARN
+    Value: !Ref CoreCertificate
+    Export:
+      Name: !Join ['-',[!Sub '${EnvName}-${ServiceName}-Certificate', 'ARN']]
