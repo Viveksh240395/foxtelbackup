@@ -1,0 +1,1843 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template is used to build CharonSSP Hosts for IDAM Applications
+Parameters:
+  EnvName:
+    Description: Environment Name
+    Type: String
+    AllowedValues:
+      - dev
+      - prod
+      - nonp
+    Default: dev
+  ProjectName:
+    Type: String
+    Default: 'DCexit-phase2-Kenan'
+    Description: Must - Project name is must.
+  ServiceName:
+    Type: String
+    Default: 'CharonSSP'
+    Description: Must - Service name is must.
+  SecurityDomain:
+    Type: String
+    Default: trusted
+  VPCID:
+    Type: String
+    Description: Specify the VPC ID
+  SubnetIDs:
+    Description: List Subnet IDs
+    Type: CommaDelimitedList
+    Default: "subnet-093c402f4c580b5f6,subnet-080a87623e9a3494b,subnet-0ed0e7bbd57ed30c9"
+  InstanceAMI:
+    Type: String
+    Description: Specify the AMI ID
+    Default: "ami-0773217260c494bbb"
+  NewInstanceAMI:
+    Type: String
+    Description: Specify the AMI ID for New Instance Type
+    Default: "ami-0773217260c494bbb"
+  AWSPRODIAMCHN01InstanceType:
+    Type: String
+    Default: z1d.3xlarge
+    Description: Specify Instance Type
+  AWSPRODIAMCHN02InstanceType:
+    Type: String
+    Default: z1d.3xlarge
+    Description: Specify Instance Type
+  AWSPRODIAMCHN03InstanceType:
+    Type: String
+    Default: z1d.3xlarge
+    Description: Specify Instance Type
+  InstanceKeyName:
+    Type: String
+    Default: NP-CustIAM-CharonSSP-Key
+  awsmigrationproject:
+    Type: String
+    Description: aws map project id
+    Default: MPE12884
+  mapmigrated:
+    Type: String
+    Description: aws map server id
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "General Configuration"
+        Parameters:
+          - EnvName
+      -
+        Label:
+          default: "EC2 build"
+        Parameters:
+          - VPCID
+          - SubnetIDs
+          - DBServerSubnetIDs
+          - SecurityDomain
+          - InstanceAMI
+          - AWSPRODIAMCHN01InstanceType
+          - AWSPRODIAMCHN02InstanceType
+          - AWSPRODIAMCHN03InstanceType
+          - awsmigrationproject
+          - mapmigrated
+          - ProjectName
+          - EnvName
+          - IamProfile
+          - ServiceName
+          - InstanceKeyName
+    ParameterLabels:
+      EnvName:
+        default: "Environment Tag"
+
+Resources:
+  # IAM Role For EC2s
+  IAMRoleforEC2:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ServiceName}-EC2-Role'
+      Description: !Sub "IAM role that allows SSM access to '${ServiceName}' EC2 instance"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: "ec2.amazonaws.com"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        - "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+        - "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+      Tags:
+        - Key: Name
+          Value: !Sub '${ServiceName}-EC2-Role'
+        - Key: Environment
+          Value: !Ref 'EnvName'
+        - Key: foxtel:project
+          Value: !Ref 'ProjectName'
+  # CharonSSP Instance profile
+  CharonSSPInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        -
+          Ref: "IAMRoleforEC2"
+
+ # Host Security Group - common
+  CharonSSPHOSTSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${EnvName}-${ServiceName}-SG'
+      GroupName : !Sub '${EnvName}-trusted-${ServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.77.132.100/32
+          Description: prod jumphost
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.77.132.123/32
+          Description: controlm
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.77.132.16/32
+          Description: ansible
+        #Stromasys License
+        - IpProtocol: tcp
+          FromPort: '1024'
+          ToPort: '65535'
+          CidrIp: 23.22.154.189/32
+          Description: Stromasys License
+        - IpProtocol: tcp
+          FromPort: '1024'
+          ToPort: '65535'
+          CidrIp: 35.181.150.18/32
+          Description: Stromasys License
+        - IpProtocol: icmp
+          FromPort: '-1'
+          ToPort: '-1'
+          CidrIp: 10.77.132.10/32
+          Description: prod nagios
+        - IpProtocol: tcp
+          FromPort: '5666'
+          ToPort: '5666'
+          CidrIp: 10.77.132.10/32
+          Description: prod nagios
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvName}-${ServiceName}-SG'
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  SolarisGuestSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Default-Solaris-Guest-SG
+      GroupName : Default-Solaris-Guest-SG
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 10.0.0.0/8
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.77.132.100/32
+          Description: prod jumphost
+        - IpProtocol: tcp
+          FromPort: '7777'
+          ToPort: '7777'
+          CidrIp: 10.77.152.31/32
+          Description: Prod cuam
+        - IpProtocol: tcp
+          FromPort: '7777'
+          ToPort: '7777'
+          CidrIp: 10.77.152.151/32
+          Description: Prod cuam
+        - IpProtocol: tcp
+          FromPort: '7777'
+          ToPort: '7777'
+          CidrIp: 10.77.153.31/32
+          Description: Prod cuam
+        - IpProtocol: tcp
+          FromPort: '7777'
+          ToPort: '7777'
+          CidrIp: 10.77.152.33/32
+          Description: Prod cuam
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.152.32/32
+          Description: Prod cuds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.152.152/32
+          Description: Prod cuds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.153.32/32
+          Description: Prod cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.152.32/32
+          Description: Prod cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.152.152/32
+          Description: Prod cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.153.32/32
+          Description: Prod cuds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.152.34/32
+          Description: Prod sfds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.152.154/32
+          Description: Prod sfds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1636'
+          CidrIp: 10.77.152.34/32
+          Description: Prod sfds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1636'
+          CidrIp: 10.77.152.154/32
+          Description: Prod sfds
+        - IpProtocol: tcp
+          FromPort: '4849'
+          ToPort: '4849'
+          CidrIp: 10.8.55.0/24
+          Description: Desktop to prodidm
+        - IpProtocol: tcp
+          FromPort: '38181'
+          ToPort: '38181'
+          CidrIp: 10.8.55.0/24
+          Description: Desktop to prodidm
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.8.55.0/24
+          Description: Desktop to prodidm
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.8.55.0/24
+          Description: Desktop to prodidm
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.5.56.32/32
+          Description: onprem sfds to aws
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1637'
+          CidrIp: 10.5.56.32/32
+          Description: onprem sfds to aws
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.5.56.109/32
+          Description: onprem cuds to aws
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1637'
+          CidrIp: 10.5.56.109/32
+          Description: onprem cuds to aws
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.5.56.109/32
+          Description: onprem cuds to aws
+        - IpProtocol: tcp
+          FromPort: '3889'
+          ToPort: '3889'
+          CidrIp: 10.77.153.42/32
+          Description: prodidm to cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.153.42/32
+          Description: prodidm to cuds
+        - IpProtocol: tcp
+          FromPort: '3889'
+          ToPort: '3889'
+          CidrIp: 10.77.152.252/32
+          Description: prodidm to cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.152.252/32
+          Description: prodidm to cuds
+        - IpProtocol: tcp
+          FromPort: '3889'
+          ToPort: '3889'
+          CidrIp: 10.77.152.65/32
+          Description: prodidm to cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.152.65/32
+          Description: prodidm to cuds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.152.31/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.152.151/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.153.31/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '3489'
+          ToPort: '3999'
+          CidrIp: 10.77.152.33/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.152.31/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.152.151/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.153.31/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '1889'
+          ToPort: '1889'
+          CidrIp: 10.77.152.33/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '3689'
+          ToPort: '3689'
+          CidrIp: 10.77.152.153/32
+          Description: prodidm to sfds
+        - IpProtocol: tcp
+          FromPort: '3689'
+          ToPort: '3689'
+          CidrIp: 10.77.153.33/32
+          Description: prodidm to sfds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '3789'
+          CidrIp: 10.77.152.0/24
+          Description: SFDS Nlb Subnet
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '3789'
+          CidrIp: 10.77.153.0/25
+          Description: SFDS Nlb Subnet
+        - IpProtocol: tcp
+          FromPort: '3689'
+          ToPort: '3689'
+          CidrIp: 10.8.55.0/24
+          Description: Desktop to prodidm
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1636'
+          CidrIp: 10.8.55.0/24
+          Description: Desktop to prodidm
+        - IpProtocol: tcp
+          FromPort: '1625'
+          ToPort: '1626'
+          CidrIp: 10.77.153.228/32
+          Description: IDM01 to idmzones
+        - IpProtocol: tcp
+          FromPort: '1625'
+          ToPort: '1626'
+          CidrIp: 10.77.152.33/32
+          Description: idm01z to 02z
+        - IpProtocol: tcp
+          FromPort: '1625'
+          ToPort: '1626'
+          CidrIp: 10.77.152.153/32
+          Description: idm02z to 01z
+        - IpProtocol: tcp
+          FromPort: '4848'
+          ToPort: '4848'
+          CidrIp: 10.77.152.33/32
+          Description: idm01z to 02z
+        - IpProtocol: tcp
+          FromPort: '4848'
+          ToPort: '4848'
+          CidrIp: 10.77.152.153/32
+          Description: idm02z to 01z
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.77.153.0/25
+          Description: IDMLB
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.77.152.128/25
+          Description: IDMLB
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.77.152.0/25
+          Description: IDMLB
+        - IpProtocol: tcp
+          FromPort: '11162'
+          ToPort: '11162'
+          CidrIp: 10.77.152.34/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '11162'
+          ToPort: '11162'
+          CidrIp: 10.77.152.154/32
+          Description: cuam to cuds
+        - IpProtocol: tcp
+          FromPort: '3589'
+          ToPort: '3889'
+          CidrIp: 10.77.152.224/32
+          Description: cuds lb
+        - IpProtocol: tcp
+          FromPort: '3589'
+          ToPort: '3889'
+          CidrIp: 10.77.153.91/32
+          Description: cuds lb
+        - IpProtocol: tcp
+          FromPort: '3589'
+          ToPort: '3889'
+          CidrIp: 10.77.152.40/32
+          Description: cuds lb
+        - IpProtocol: tcp
+          FromPort: '7000'
+          ToPort: '7806'
+          CidrIp: 10.77.132.123/32
+          Description: controlM
+        - IpProtocol: tcp
+          FromPort: '1571'
+          ToPort: '1572'
+          CidrIp: 10.77.132.123/32
+          Description: controlM
+        - IpProtocol: tcp
+          FromPort: '5666'
+          ToPort: '5666'
+          CidrIp: 10.77.132.10/32
+          Description: prod nagios
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.77.153.0/25
+          Description: CUAMLB
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.77.152.128/25
+          Description: CUAMLB
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.77.152.0/25
+          Description: CUAMLB
+        - IpProtocol: tcp
+          FromPort: '3400'
+          ToPort: '4000'
+          CidrIp: 10.12.1.111/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1889'
+          CidrIp: 10.12.1.111/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '3400'
+          ToPort: '4000'
+          CidrIp: 10.12.1.112/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1889'
+          CidrIp: 10.12.1.112/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '3400'
+          ToPort: '4000'
+          CidrIp: 10.2.15.201/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1889'
+          CidrIp: 10.2.15.201/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '3400'
+          ToPort: '4000'
+          CidrIp: 10.2.15.202/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1889'
+          CidrIp: 10.2.15.202/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '3400'
+          ToPort: '4000'
+          CidrIp: 10.2.15.203/32
+          Description: sydprdreplds
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1889'
+          CidrIp: 10.2.15.203/32
+          Description: sydprdreplds
+        - IpProtocol: icmp
+          FromPort: '-1'
+          ToPort: '-1'
+          CidrIp: 10.77.132.10/32
+          Description: prod nagios
+        - IpProtocol: tcp
+          FromPort: '5666'
+          ToPort: '5666'
+          CidrIp: 10.77.132.10/32
+          Description: prod nagios
+        - IpProtocol: tcp
+          FromPort: '3689'
+          ToPort: '3789'
+          CidrIp: 10.151.18.160/28
+          Description: oxfprodapp
+        - IpProtocol: tcp
+          FromPort: '1636'
+          ToPort: '1636'
+          CidrIp: 10.151.18.160/28
+          Description: oxfprodapp
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.134.234.0/24
+          Description: VM to iam
+        - IpProtocol: tcp
+          FromPort: '4849'
+          ToPort: '4849'
+          CidrIp: 10.134.234.0/24
+          Description: VM to iam
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.77.132.123/32
+          Description: controlm
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.77.132.16/32
+          Description: ansible
+        - IpProtocol: tcp
+          FromPort: '3889'
+          ToPort: '3889'
+          CidrIp: 10.134.234.0/24
+          Description: VM to iam
+        - IpProtocol: tcp
+          FromPort: '3689'
+          ToPort: '3889'
+          CidrIp: 10.77.132.100/32
+          Description: prodjumpldap
+
+
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  # --------------CharonSSP Hosts----------------------
+  # AWSPRODIAMCHN01
+  AWSPRODIAMCHN01:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref NewInstanceAMI
+      InstanceType: !Ref AWSPRODIAMCHN01InstanceType
+      KeyName: !Ref InstanceKeyName
+      SecurityGroupIds:
+        - !Ref CharonSSPHOSTSG
+      SubnetId: !Select [0, !Ref SubnetIDs]
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      PrivateIpAddress: '10.77.152.117'
+      DisableApiTermination: true
+      IamInstanceProfile: !Ref CharonSSPInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName:  /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: '50'
+        - DeviceName: /dev/sdb
+          VirtualName: ephemeral0
+      UserData:
+        Fn::Base64:
+          !Sub |
+           #!/bin/bash
+           # Setup AWS CLI
+            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+            yum install unzip -y
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip;sudo ./aws/install
+           # SSM Agent install & Setup
+            useradd ssm-user
+            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+            yum install /amazon-ssm-agent.rpm -y
+            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+            echo "#SSM user root access "  >> /etc/sudoers
+            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+           # Install nvme-cli
+            yum install nvme-cli -y
+           # Download Solaris 10 ISO for Solaris Glbal zone build
+            unset https_proxy
+            cd /charon/storage/media
+            curl -k -O https://prod-bitbukt-01.ent.foxtel.com.au/Stromasys_FieldTrialkit/sol-10-u11-ga-sparc-dvd.iso
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvName}-${ServiceName}-01'
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: foxtel:billing-ec2-bkp-daily
+          Value:  true
+        - Key: foxtel:billing-ec2-bkp-monthly
+          Value:  true
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+        - Key: foxtel:sox-scope
+          Value: true
+
+  # EBS Volumes for Hosts
+  #----------- Solaris Global Zone Root Awssitkap01glz for AWSPRODIAMCHN01------------
+  # prod-iam-chn-01 - z1d.3xlarge - Hosting Solaris 10 Guests
+  Awsprodiam01glzRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 80
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodiam01glz-RootDisk
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodiam01glzRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      VolumeId: !Ref Awsprodiam01glzRoot
+      Device: /dev/sdf
+
+  # Awsprodcuam01z Root Disk
+  Awsprodcuam01zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 80
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodcuam01z_Root
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodcuam01zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      VolumeId: !Ref Awsprodcuam01zRoot
+      Device: /dev/sdg
+
+  # Awsprodcuds01z Root Disk
+  Awsprodcuds01zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 150
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodcuds01zRoot
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodcuds01zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      VolumeId: !Ref Awsprodcuds01zRoot
+      Device: /dev/sdh
+
+  # Awsprodidm01z Root Disk
+  Awsprodidm01zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 50
+      VolumeType: gp3
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodidm01z_root
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodidm01zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      VolumeId: !Ref Awsprodidm01zRoot
+      Device: /dev/sdi
+
+  # Awsprodsfds01z Root Disk
+  Awsprodsfds01zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 50
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodsfds01z_root
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodsfds01zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      VolumeId: !Ref Awsprodsfds01zRoot
+      Device: /dev/sdk
+  # awsprodcuds01z_backup Disk
+  awsprodcuds01zbackup:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 300
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodcuds01z_backup
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodcuds01zbackup:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      VolumeId: !Ref awsprodcuds01zbackup
+      Device: /dev/sdm
+  awsprodiamchn01swap:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 100
+      VolumeType: gp3
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodiamchn01_swap
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodiamchn01swap:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      VolumeId: !Ref awsprodiamchn01swap
+      Device: /dev/sdp
+
+  # Network Interfaces
+  AWSPRODIAMCHN01GlobalENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Tags:
+         - Key: Name
+           Value: ENI-AWSPRODIAMCHN01Global
+      Description: ENI for AWSPRODIAMCHN01Global private IP
+      GroupSet:
+        - !Ref SolarisGuestSG
+      SourceDestCheck: 'false'
+      SubnetId: !Select [0, !Ref SubnetIDs]
+      PrivateIpAddress: 10.77.152.30
+  AWSPRODIAMCHN01GlobalENIAttachment:
+    Type: AWS::EC2::NetworkInterfaceAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      NetworkInterfaceId: !Ref AWSPRODIAMCHN01GlobalENI
+      DeviceIndex: 1
+
+  AWSPRODIAMCHN01ZonesENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Tags:
+         - Key: Name
+           Value: ENI-AWSPRODIAMCHN01Zones
+      Description: ENI for CUAM zone ENIs
+      GroupSet:
+        - !Ref SolarisGuestSG
+      SourceDestCheck: 'false'
+      SubnetId: !Select [0, !Ref SubnetIDs]
+      PrivateIpAddresses:
+          - Primary: True
+            PrivateIpAddress: 10.77.152.31
+          - Primary: false
+            PrivateIpAddress: 10.77.152.32
+          - Primary: false
+            PrivateIpAddress: 10.77.152.33
+          - Primary: false
+            PrivateIpAddress: 10.77.152.34
+  AWSPRODIAMCHN01ZonesENIAttachment:
+    Type: AWS::EC2::NetworkInterfaceAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN01
+      NetworkInterfaceId: !Ref AWSPRODIAMCHN01ZonesENI
+      DeviceIndex: 2
+
+  # AWSPRODIAMCHN02
+  AWSPRODIAMCHN02:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref NewInstanceAMI
+      InstanceType: !Ref AWSPRODIAMCHN02InstanceType
+      KeyName: !Ref InstanceKeyName
+      SecurityGroupIds:
+        - !Ref CharonSSPHOSTSG
+      SubnetId: !Select [1, !Ref SubnetIDs]
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      DisableApiTermination: true
+      IamInstanceProfile: !Ref CharonSSPInstanceProfile
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvName}-${ServiceName}-02'
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: foxtel:billing-ec2-bkp-daily
+          Value:  true
+        - Key: foxtel:billing-ec2-bkp-monthly
+          Value:  true
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+        - Key: foxtel:sox-scope
+          Value: true
+
+      BlockDeviceMappings:
+        - DeviceName:  /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: '50'
+        - DeviceName: /dev/sdb
+          VirtualName: ephemeral0
+
+      UserData:
+        Fn::Base64:
+          !Sub |
+           #!/bin/bash
+           # Setup AWS CLI
+            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+            yum install unzip -y
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip;sudo ./aws/install
+           # SSM Agent install & Setup
+            useradd ssm-user
+            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+            yum install /amazon-ssm-agent.rpm -y
+            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+            echo "#SSM user root access "  >> /etc/sudoers
+            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+           # Install nvme-cli
+            yum install nvme-cli -y
+           # Download Solaris 10 ISO for Solaris Glbal zone build
+            unset https_proxy
+            cd /charon/storage/media
+            curl -k -O https://prod-bitbukt-01.ent.foxtel.com.au/Stromasys_FieldTrialkit/sol-10-u11-ga-sparc-dvd.iso
+
+  Awsprodiam02glzRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 80
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodiam02glzRoot
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodiam02glzRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      VolumeId: !Ref Awsprodiam02glzRoot
+      Device: /dev/sdf
+
+  Awsprodcuam02zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 80
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodcuam02zRoot
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodcuam02zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      VolumeId: !Ref Awsprodcuam02zRoot
+      Device: /dev/sdg
+
+  Awsprodidm02zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 50
+      VolumeType: gp3
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodidm02z_root
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodidm02zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      VolumeId: !Ref Awsprodidm02zRoot
+      Device: /dev/sdi
+
+  awsprodcuds02zbackup:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 300
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodcuds02z_backup
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodcuds02zbackup:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      VolumeId: !Ref awsprodcuds02zbackup
+      Device: /dev/sdm
+
+  awsprodcuds02zroot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 150
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodcuds02z_root
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodcuds02zroot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      VolumeId: !Ref awsprodcuds02zroot
+      Device: /dev/sdn
+
+  awsprodsfds02zroot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 50
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodsfds02z_root
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodsfds02zroot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      VolumeId: !Ref awsprodsfds02zroot
+      Device: /dev/sdo
+
+  awsprodiamchn02swap:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 100
+      VolumeType: gp3
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodiamchn02_swap
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodiamchn02swap:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      VolumeId: !Ref awsprodiamchn02swap
+      Device: /dev/sdp
+
+  # Network Interfaces
+  AWSPRODIAMCHN02GlobalENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Tags:
+         - Key: Name
+           Value: ENI-AWSPRODIAMCHN02Global
+      Description: ENI for AWSPRODIAMCHN02Global private IP
+      GroupSet:
+        - !Ref SolarisGuestSG
+      SourceDestCheck: 'false'
+      SubnetId: !Select [1, !Ref SubnetIDs]
+      PrivateIpAddress: 10.77.152.150
+  AWSPRODIAMCHN02GlobalENIAttachment:
+    Type: AWS::EC2::NetworkInterfaceAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      NetworkInterfaceId: !Ref AWSPRODIAMCHN02GlobalENI
+      DeviceIndex: 1
+
+  AWSPRODIAMCHN02ZonesENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Tags:
+         - Key: Name
+           Value: ENI-AWSPRODIAMCHN02Zones
+      Description: ENI for CUAM zone ENIs
+      GroupSet:
+        - !Ref SolarisGuestSG
+      SourceDestCheck: 'false'
+      SubnetId: !Select [1, !Ref SubnetIDs]
+      PrivateIpAddresses:
+          - Primary: True
+            PrivateIpAddress: 10.77.152.151
+          - Primary: false
+            PrivateIpAddress: 10.77.152.152
+          - Primary: false
+            PrivateIpAddress: 10.77.152.153
+          - Primary: false
+            PrivateIpAddress: 10.77.152.154
+  AWSPRODIAMCHN02ZonesENIAttachment:
+    Type: AWS::EC2::NetworkInterfaceAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN02
+      NetworkInterfaceId: !Ref AWSPRODIAMCHN02ZonesENI
+      DeviceIndex: 2
+
+  # prod-iam-chn-03 - c5.12xlarge - Hosting Solaris 10 Guests
+  AWSPRODIAMCHN03:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref NewInstanceAMI
+      InstanceType: !Ref AWSPRODIAMCHN03InstanceType
+      KeyName: !Ref InstanceKeyName
+      SecurityGroupIds:
+        - !Ref CharonSSPHOSTSG
+      SubnetId: !Select [2, !Ref SubnetIDs]
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      PrivateIpAddress: '10.77.153.41'
+      DisableApiTermination: true
+      IamInstanceProfile: !Ref CharonSSPInstanceProfile
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvName}-${ServiceName}-03'
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: foxtel:billing-ec2-bkp-daily
+          Value:  true
+        - Key: foxtel:billing-ec2-bkp-monthly
+          Value:  true
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+        - Key: foxtel:sox-scope
+          Value: true
+
+      BlockDeviceMappings:
+        - DeviceName:  /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: '50'
+        - DeviceName: /dev/sdb
+          VirtualName: ephemeral0
+
+      UserData:
+        Fn::Base64:
+          !Sub |
+           #!/bin/bash
+           # Setup AWS CLI
+            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+            yum install unzip -y
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip;sudo ./aws/install
+           # SSM Agent install & Setup
+            useradd ssm-user
+            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+            yum install /amazon-ssm-agent.rpm -y
+            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+            echo "#SSM user root access "  >> /etc/sudoers
+            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+           # Install nvme-cli
+            yum install nvme-cli -y
+           # Download Solaris 10 ISO for Solaris Glbal zone build
+            unset https_proxy
+            cd /charon/storage/media
+            curl -k -O https://prod-bitbukt-01.ent.foxtel.com.au/Stromasys_FieldTrialkit/sol-10-u11-ga-sparc-dvd.iso
+
+  # Global Zone Root
+  Awsprodiam03glzRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 80
+      VolumeType: gp2
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodiam03glzRoot
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodiam03glzRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      VolumeId: !Ref Awsprodiam03glzRoot
+      Device: /dev/sdf
+
+  #Awsprodcuam03z - Root Disk
+  Awsprodcuam03zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 80
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodcuam03zRoot
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodcuam03zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      VolumeId: !Ref Awsprodcuam03zRoot
+      Device: /dev/sdg
+
+  # Awsprodcuds03z - Root Disk
+  Awsprodcuds03zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 150
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: Awsprodcuds03zRoot
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  MountAwsprodcuds03zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      VolumeId: !Ref Awsprodcuds03zRoot
+      Device: /dev/sdh
+
+  awsprodcuds03zbackup:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 300
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodcuds03z_backup
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodcuds03zbackup:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      VolumeId: !Ref awsprodcuds03zbackup
+      Device: /dev/sdm
+  # awsprodcuam04z Root Disk
+  awsprodcuam04zRoot:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 80
+      VolumeType: gp3
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodcuam04z_root
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodcuam04zRoot:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      VolumeId: !Ref awsprodcuam04zRoot
+      Device: /dev/sdi
+
+  awsprodiamchn03swap:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 100
+      VolumeType: gp3
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awsprodiamchn03_swap
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'mapmigrated'
+  Mountawsprodiamchn03swap:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      VolumeId: !Ref awsprodiamchn03swap
+      Device: /dev/sdp
+  # Network Interfaces
+  AWSPRODIAMCHN03GlobalENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Tags:
+         - Key: Name
+           Value: ENI-AWSPRODIAMCHN03Global
+      Description: ENI for AWSPRODIAMCHN03Global private IP
+      GroupSet:
+        - !Ref SolarisGuestSG
+      SourceDestCheck: 'false'
+      SubnetId: !Select [2, !Ref SubnetIDs]
+      PrivateIpAddress: 10.77.153.30
+  AWSPRODIAMCHN03GlobalENIAttachment:
+    Type: AWS::EC2::NetworkInterfaceAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      NetworkInterfaceId: !Ref AWSPRODIAMCHN03GlobalENI
+      DeviceIndex: 1
+
+  AWSPRODIAMCHN03ZonesENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Tags:
+         - Key: Name
+           Value: ENI-AWSPRODIAMCHN03Zones
+      Description: ENI for CUAM zone ENIs
+      GroupSet:
+        - !Ref SolarisGuestSG
+      SourceDestCheck: 'false'
+      SubnetId: !Select [2, !Ref SubnetIDs]
+      PrivateIpAddresses:
+          - Primary: True
+            PrivateIpAddress: 10.77.153.31
+          - Primary: false
+            PrivateIpAddress: 10.77.153.32
+          - Primary: false
+            PrivateIpAddress: 10.77.153.33
+          - Primary: false
+            PrivateIpAddress: 10.77.153.34
+  AWSPRODIAMCHN03ZonesENIAttachment:
+    Type: AWS::EC2::NetworkInterfaceAttachment
+    Properties:
+      InstanceId: !Ref AWSPRODIAMCHN03
+      NetworkInterfaceId: !Ref AWSPRODIAMCHN03ZonesENI
+      DeviceIndex: 2
+
+  #---------Monitoring---------#
+  IDMCharonSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: "TCSDataCentreOperations@foxtel.com.au"
+          Protocol: "email"
+        - Endpoint: "ciolinuxadmin@foxtel.com.au"
+          Protocol: "email"
+        - Endpoint: "KenanPlatformEngineering@foxtel.com.au"
+          Protocol: "email"
+      TopicName: IDMCharonSNS
+
+  IDMCHN01CPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: CPU alarm for IDMCHN01 instance
+      AlarmActions:
+      - Ref: IDMCharonSNS
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '95'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN01
+  IDMCHN01MemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: Memory alarm for IDMCHN01
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '95'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN01
+      - Name: ImageId
+        Value: !Ref NewInstanceAMI
+      - Name: InstanceType
+        Value: !Ref AWSPRODIAMCHN01InstanceType
+  IDMCHN01SystemStatusAlarmCHN01:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: StatusCheckFailed_System for IDMCH01
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Statistic: Minimum
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '1'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN01
+  IDMCHN01InstanceStatusAlarmCHN01:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: StatusCheckFailed_Instance For IDMCHN01
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Statistic: Minimum
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '1'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN01
+  IDMCHN01RootFS:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: RootFS alarm IDMCHN01
+      Namespace: CWAgent
+      MetricName: disk_used_percent
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '90'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: path
+        Value: /
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN01
+      - Name: ImageId
+        Value: !Ref NewInstanceAMI
+      - Name: InstanceType
+        Value: !Ref AWSPRODIAMCHN01InstanceType
+      - Name: device
+        Value: nvme0n1p1
+      - Name: fstype
+        Value: xfs
+
+  IDMCHN02CPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: CPU alarm for IDMCHN02 instance
+      AlarmActions:
+      - Ref: IDMCharonSNS
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '95'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN02
+  IDMCHN02MemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: Memory alarm for IDMCHN02
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '95'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN02
+      - Name: ImageId
+        Value: !Ref NewInstanceAMI
+      - Name: InstanceType
+        Value: !Ref AWSPRODIAMCHN02InstanceType
+  IDMCHN02SystemStatusAlarmCHN02:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: StatusCheckFailed_System for IDMCH02
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Statistic: Minimum
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '1'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN02
+  IDMCHN02InstanceStatusAlarmCHN02:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: StatusCheckFailed_Instance For IDMCHN02
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Statistic: Minimum
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '1'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN02
+  IDMCHN02RootFS:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: RootFS alarm IDMCHN01
+      Namespace: CWAgent
+      MetricName: disk_used_percent
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '90'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: path
+        Value: /
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN02
+      - Name: ImageId
+        Value: !Ref NewInstanceAMI
+      - Name: InstanceType
+        Value: !Ref AWSPRODIAMCHN02InstanceType
+      - Name: device
+        Value: nvme0n1p1
+      - Name: fstype
+        Value: xfs
+
+  IDMCHN03CPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: CPU alarm for IDMCHN03 instance
+      AlarmActions:
+      - Ref: IDMCharonSNS
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '95'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN03
+  IDMCHN03MemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: Memory alarm for IDMCHN03
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '95'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN03
+      - Name: ImageId
+        Value: !Ref NewInstanceAMI
+      - Name: InstanceType
+        Value: !Ref AWSPRODIAMCHN01InstanceType
+  IDMCHN03SystemStatusAlarmCHN03:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: StatusCheckFailed_System for IDMCH03
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Statistic: Minimum
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '1'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN03
+  IDMCHN03InstanceStatusAlarmCHN03:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: StatusCheckFailed_Instance For IDMCHN03
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Statistic: Minimum
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '1'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN03
+  IDMCHN03RootFS:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    Properties:
+      AlarmDescription: RootFS alarm IDMCHN03
+      Namespace: CWAgent
+      MetricName: disk_used_percent
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: '90'
+      AlarmActions:
+      - !Ref IDMCharonSNS
+      OKActions:
+      - !Ref IDMCharonSNS
+      Dimensions:
+      - Name: path
+        Value: /
+      - Name: InstanceId
+        Value: !Ref AWSPRODIAMCHN03
+      - Name: ImageId
+        Value: !Ref NewInstanceAMI
+      - Name: InstanceType
+        Value: !Ref AWSPRODIAMCHN03InstanceType
+      - Name: device
+        Value: nvme0n1p1
+      - Name: fstype
+        Value: xfs
+
+Outputs:
+  SecurityGroup:
+    Description: Prod CharonSSP Host Security Grp
+    Value: !Ref CharonSSPHOSTSG
+  AWSPRODIAMCHN01:
+    Description: Prod CharonSSP prod-iam-chn-01
+    Value: !Ref AWSPRODIAMCHN01
+  AWSPRODIAMCHN02:
+    Description: Prod CharonSSP prod-iam-chn-02
+    Value: !Ref AWSPRODIAMCHN02
+  AWSPRODIAMCHN03:
+    Description: Prod CharonSSP prod-iam-chn-03
+    Value: !Ref AWSPRODIAMCHN03
+
+  # ENIs Outputs
+  AWSPRODIAMCHN01GlobalENI:
+    Description: ENI and Private IP address of AWSPRODIAMCHN01Global
+    Value: !Join ['-', [!Ref AWSPRODIAMCHN01GlobalENI, !GetAtt [AWSPRODIAMCHN01GlobalENI, PrimaryPrivateIpAddress]]]
+  AWSPRODIAMCHN01ZonesENI:
+    Description: ENI and ENI and ENI and Private IP address of AWSPRODIAMCHN01ZonesENI
+    Value: !Join ['-', [!Ref AWSPRODIAMCHN01ZonesENI, !GetAtt [AWSPRODIAMCHN01ZonesENI, PrimaryPrivateIpAddress]]]
+
+  AWSPRODIAMCHN02GlobalENI:
+    Description: ENI and Private IP address of AWSPRODIAMCHN02Global
+    Value: !Join ['-', [!Ref AWSPRODIAMCHN02GlobalENI, !GetAtt [AWSPRODIAMCHN02GlobalENI, PrimaryPrivateIpAddress]]]
+  AWSPRODIAMCHN02ZonesENI:
+    Description: ENI and ENI and ENI and Private IP address of AWSPRODIAMCHN02ZonesENI
+    Value: !Join ['-', [!Ref AWSPRODIAMCHN02ZonesENI, !GetAtt [AWSPRODIAMCHN02ZonesENI, PrimaryPrivateIpAddress]]]
+
+  AWSPRODIAMCHN03GlobalENI:
+    Description: ENI and Private IP address of AWSPRODIAMCHN03Global
+    Value: !Join ['-', [!Ref AWSPRODIAMCHN03GlobalENI, !GetAtt [AWSPRODIAMCHN03GlobalENI, PrimaryPrivateIpAddress]]]
+  AWSPRODIAMCHN03ZonesENI:
+    Description: ENI and ENI and ENI and Private IP address of AWSPRODIAMCHN03ZonesENI
+    Value: !Join ['-', [!Ref AWSPRODIAMCHN03ZonesENI, !GetAtt [AWSPRODIAMCHN03ZonesENI, PrimaryPrivateIpAddress]]]
