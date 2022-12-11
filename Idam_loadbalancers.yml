@@ -1,0 +1,663 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template builds the application loadbalancer configurations for Legacy Solaris Middleware applications
+Parameters:
+  EnvName:
+    Description: Environment Name
+    Type: String
+    AllowedValues:
+      - sit2
+      - sit1
+      - nonp
+      - prod
+    Default: sit2
+  ProjectName:
+    Type: String
+    Default: 'DCexit-phase1'
+    Description: Must - Project name is must.
+  ServiceName:
+    Type: String
+    Default: 'idm'
+    Description: Must - Service name is must.
+  SecurityDomain:
+    Type: String
+    Default: trusted
+  VPCID:
+    Type: String
+    Description: Specify the VPC ID
+  SubnetIDs:
+    Description: List Subnet IDs
+    Type: CommaDelimitedList
+    Default: "subnet-04c6a9ed1dfd857e4,subnet-0cd63c030ef44bdd2,subnet-0ed0d59be8a8b271a"
+  SFDSCertificateArn:
+    Type: String
+    Description: Must be a valid certificate Arn.
+  awsmigrationproject:
+    Type: String
+    Description: aws map project id
+    Default: MPE12884
+  InfraSupportEMail:
+    Description: Infrastructure group email address to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)"
+    ConstraintDescription: "must be a valid email address."
+    Default: "Sainu.daniel@foxtel.com.au"
+  ApplicationSupportEMail:
+    Description: Application group email address  to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)"
+    ConstraintDescription: "must be a valid email address."
+    Default: "Sainu.daniel@foxtel.com.au"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "General Configuration"
+        Parameters:
+          - EnvName
+          - ProjectName
+          - awsmigrationproject
+          - SecurityDomain
+          - SubnetIDs
+          - VPCID
+          - InfraSupportEMail
+          - ApplicationSupportEMail
+
+    ParameterLabels:
+      EnvName:
+        default: "Environment Tag"
+
+Resources:
+# ALB - Security Groups
+  IAMAlbSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${EnvName}-${ServiceName}-IAM-ALB-SG'
+      GroupName : !Sub '${EnvName}-${SecurityDomain}-${ServiceName}-iam-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet Ranges'
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.80.0.0/14
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.128.0.0/11
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.8.55.0/24
+          Description: 'Ops desktop access'
+        - IpProtocol: tcp
+          FromPort: '49303'
+          ToPort: '49303'
+          CidrIp: 10.70.0.0/16
+          Description: 'AWS86 VPC'
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+      VpcId: !Ref 'VPCID'
+
+  IDMAlbSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${EnvName}-${ServiceName}-IDM-ALB-SG'
+      GroupName : !Sub '${EnvName}-${SecurityDomain}-${ServiceName}-idm-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet Ranges'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.80.0.0/14
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.128.0.0/11
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to Prod IDM Alb'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.8.55.0/24
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.8.80.0/23
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.134.192.0/20
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.150.192.0/18
+          Description: 'VDI mydesk2'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.7.0.0/16
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.3.110.0/24
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 10.12.0.0/16
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet Ranges'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.80.0.0/14
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.128.0.0/11
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to Prod IDM Alb'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.8.55.0/24
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.8.80.0/23
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.134.192.0/20
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.150.192.0/18
+          Description: 'VDI mydesk2'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.7.80.0/22
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.3.110.0/24
+          Description: 'VDI mydesk1'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.12.0.0/16
+          Description: 'VDI mydesk1'
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+      VpcId: !Ref 'VPCID'
+
+# Elastic Load Balancers------------
+
+  # Staff IDM Certificate
+  IDMCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: awsprodidmalb.sms.foxtel.com.au
+      ValidationMethod: EMAIL
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: 'foxtel:service-name'
+          Value:  !Ref ServiceName
+
+# Application LoadBalancer - IAM(CUAM)---------------
+  IAMAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${ServiceName}-ALB-CUAM
+      SecurityGroups:
+        - !Ref IAMAlbSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref SubnetIDs]
+        - !Select [1, !Ref SubnetIDs]
+        - !Select [2, !Ref SubnetIDs]
+  # Listener & TGs  -- IAM
+  IAMAlbListenerCuam49303:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - IAMAlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref CuamTargetGroup49303
+      LoadBalancerArn: !Ref IAMAlb
+      Port: 49303
+      Protocol: "HTTP"
+
+  CuamTargetGroup49303:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-TG-CUAM-49303'
+      HealthCheckPath: "/opensso/isAlive.jsp"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 2
+      Port: 49303
+      Protocol: HTTP
+      TargetType: ip
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "app_cookie"
+        - Key: "stickiness.app_cookie.duration_seconds"
+          Value: "7200"
+        - Key: "stickiness.app_cookie.cookie_name"
+          Value: "amlbcookie"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "120"
+      VpcId: !Ref VPCID
+
+## Network LoadBalancer - IAM (CUDS)
+  IAMNlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${ServiceName}-NLB-CUDS
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+#        - Key: access_logs.s3.enabled
+#          Value: true
+#        - Key: access_logs.s3.bucket
+#          Value: dev-kenan-logs
+#        - Key: access_logs.s3.prefix
+#          Value: LoadbalancerLogs
+        - Key: load_balancing.cross_zone.enabled
+          Value: true
+      Type: network
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref SubnetIDs]
+        - !Select [1, !Ref SubnetIDs]
+        - !Select [2, !Ref SubnetIDs]
+
+  # Listener & TGs  -- IAM
+  CUDSNlbListener3889:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - IAMNlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref CudsTargetGroup3889
+      LoadBalancerArn: !Ref IAMNlb
+      Port: 3889
+      Protocol: "TCP"
+
+  CUDSNlbListener3589:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - IAMNlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref CudsTargetGroup3589
+      LoadBalancerArn: !Ref IAMNlb
+      Port: 3589
+      Protocol: "TCP"
+
+  CudsTargetGroup3889:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-TG-CUDS-3889'
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Port: 3889
+      Protocol: TCP
+      TargetType: ip
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "source_ip"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+        - Key: deregistration_delay.connection_termination.enabled
+          Value: false
+        - Key: preserve_client_ip.enabled
+          Value: false
+        - Key: proxy_protocol_v2.enabled
+          Value: false
+      VpcId: !Ref VPCID
+
+  CudsTargetGroup3589:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-TG-CUDS-3589'
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Port: 3589
+      Protocol: TCP
+      TargetType: ip
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "source_ip"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+        - Key: deregistration_delay.connection_termination.enabled
+          Value: false
+        - Key: preserve_client_ip.enabled
+          Value: false
+        - Key: proxy_protocol_v2.enabled
+          Value: false
+      VpcId: !Ref VPCID
+
+  # --------- Application LoadBalancer - IDM ---------
+  IDMAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${ServiceName}-ALB-IDM
+      SecurityGroups:
+        - !Ref IDMAlbSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref SubnetIDs]
+        - !Select [1, !Ref SubnetIDs]
+        - !Select [2, !Ref SubnetIDs]
+
+  IDMHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - IDMAlb
+    Properties:
+      Certificates:
+        - !Ref IDMCertificate
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref IdmTargetGroup8080
+      LoadBalancerArn: !Ref IDMAlb
+      Port: "443"
+      Protocol: "HTTPS"
+
+  # Listener & TGs  -- IDM
+  IDMAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - IDMAlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref IdmTargetGroup8080
+      LoadBalancerArn: !Ref IDMAlb
+      Port: 8080
+      Protocol: "HTTP"
+
+  IdmTargetGroup8080:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-TG-IDM-8080'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 5
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "300"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+# Network LoadBalancer - Staff Directory Services ---------------------------
+
+  SFDSNlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${ServiceName}-NLB-SFDS
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+#        - Key: access_logs.s3.enabled
+#          Value: true
+#        - Key: access_logs.s3.bucket
+#          Value: dev-kenan-logs
+#        - Key: access_logs.s3.prefix
+#          Value: LoadbalancerLogs
+        - Key: load_balancing.cross_zone.enabled
+          Value: true
+      Type: network
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref SubnetIDs]
+        - !Select [1, !Ref SubnetIDs]
+        - !Select [2, !Ref SubnetIDs]
+
+  # Listener & TGs  -- IDM
+  SFDSNlbListener3689:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - SFDSNlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref SfdsTargetGroup3689
+      LoadBalancerArn: !Ref SFDSNlb
+      Port: 3689
+      Protocol: "TCP"
+
+  SFDSNlbListener3789:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - SFDSNlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref SfdsTargetGroup3789
+      LoadBalancerArn: !Ref SFDSNlb
+      Port: 3789
+      Protocol: "TCP"
+
+  SFDSNlbListener1636:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - SFDSNlb
+    Properties:
+      Certificates:
+        - !Ref SFDSCertificateArn
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref SfdsTargetGroup1636
+      LoadBalancerArn: !Ref SFDSNlb
+      Port: 1636
+      Protocol: "TLS"
+
+  SfdsTargetGroup3689:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-TG-SFDS-3689'
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Port: 3689
+      Protocol: TCP
+      TargetType: ip
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: "stickiness.type"
+          Value: "source_ip"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+        - Key: deregistration_delay.connection_termination.enabled
+          Value: false
+        - Key: preserve_client_ip.enabled
+          Value: false
+        - Key: proxy_protocol_v2.enabled
+          Value: false
+      VpcId: !Ref VPCID
+
+  SfdsTargetGroup3789:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-TG-SFDS-3789'
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Port: 3789
+      Protocol: TCP
+      TargetType: ip
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: "stickiness.type"
+          Value: "source_ip"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+        - Key: deregistration_delay.connection_termination.enabled
+          Value: false
+        - Key: preserve_client_ip.enabled
+          Value: true
+        - Key: proxy_protocol_v2.enabled
+          Value: false
+      VpcId: !Ref VPCID
+
+  SfdsTargetGroup1636:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${ServiceName}-TG-SFDS-1636'
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Port: 1636
+      Protocol: TLS
+      TargetType: ip
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: "stickiness.type"
+          Value: "source_ip"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+        - Key: deregistration_delay.connection_termination.enabled
+          Value: false
+        - Key: preserve_client_ip.enabled
+          Value: false
+        - Key: proxy_protocol_v2.enabled
+          Value: false
+      VpcId: !Ref VPCID
+
+Outputs:
+    IAMAlb:
+        Description: IAM loadbalancer
+        Value: !Ref IAMAlb
+    CuamTargetGroup49303:
+        Description: CUDS Target Group
+        Value: !Ref CuamTargetGroup49303
+    IAMAlbSG:
+        Description: IAM ALB Security Group
+        Value: !Ref IAMAlbSG
+
+    IAMNlb:
+        Description: IAM loadbalancer
+        Value: !Ref IAMNlb
+    CudsTargetGroup3889:
+        Description: CUDS Target Group
+        Value: !Ref CudsTargetGroup3889
+    CudsTargetGroup3589:
+        Description: CUDS Target Group
+        Value: !Ref CudsTargetGroup3589
+
+
+    IDMAlb:
+        Description: IDM loadbalancer
+        Value: !Ref IDMAlb
+    IdmTargetGroup8080:
+        Description: IDM Target Group
+        Value: !Ref IdmTargetGroup8080
+    IDMAlbSG:
+        Description: IDM ALB Security Group
+        Value: !Ref IDMAlbSG
+
+    SFDSNlb:
+        Description: Staff Directory Service loadbalancer
+        Value: !Ref SFDSNlb
+    SfdsTargetGroup3689:
+        Description: Staff Directory Service Target Group
+        Value: !Ref SfdsTargetGroup3689
+    SfdsTargetGroup3789:
+        Description: Staff Directory Service Target Group
+        Value: !Ref SfdsTargetGroup3789
+    SfdsTargetGroup1636:
+        Description: Staff Directory Service Target Group
+        Value: !Ref SfdsTargetGroup1636
