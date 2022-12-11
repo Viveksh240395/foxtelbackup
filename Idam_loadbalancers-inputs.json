@@ -1,0 +1,14 @@
+{
+    "Parameters" : {
+      "EnvName"                     : "prod",
+      "ProjectName"                 : "KAM",
+      "SecurityDomain"              : "trusted",
+      "ServiceName"                 : "IDAM",
+      "SFDSCertificateArn"          : "arn:aws:acm:ap-southeast-2:246198582989:certificate/a5fce8db-afaa-4b1b-bdbb-141a934b677b",
+      "SubnetIDs"                   : "subnet-0e9817530551ab12c,subnet-0b70967fd0a34ef3b,subnet-03ff4af3a213496f2",
+      "VPCID"                       : "vpc-0a51dac43fc0ba783",
+      "awsmigrationproject"         : "MPE12884",
+      "InfraSupportEMail"           : "kenanplatformengineering@foxtel.com.au",
+      "ApplicationSupportEMail"     : "idmsupport@foxtel.com.au"
+    }
+}
