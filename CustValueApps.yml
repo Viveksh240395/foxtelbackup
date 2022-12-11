@@ -1,0 +1,2670 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template builds the Linux based infrastructure for Kenan suites of applications (Core,WP,WLH,INT & ST Webservices)
+Parameters:
+  EnvName:
+    Description: Environment Name
+    Type: String
+    AllowedValues:
+      - sit2
+      - nonp
+    Default: sit2
+  ProjectName:
+    Type: String
+    Default: 'DCexit-phase1'
+    Description: Must - Project name is must.
+  STWebServiceName:
+    Type: String
+    Default: 'Kenan-st-web'
+    Description: Must - Service name is must.
+  INTWebServiceName:
+    Type: String
+    Default: 'Kenan-int-web'
+    Description: Must - Service name is must.
+  CoreServiceName:
+    Type: String
+    Default: 'Kenan-core'
+    Description: Must - Service name is must.
+  WPServiceName:
+    Type: String
+    Default: 'Kenan-workpoint'
+    Description: Must - Service name is must.
+  WLHServiceName:
+    Type: String
+    Default: 'Kenan-worklisthandler'
+    Description: Must - Service name is must.
+  KenanQServiceName:
+    Type: String
+    Default: 'Kenan-queue'
+    Description: Must - Service name is must.
+  SecurityDomain:
+    Type: String
+    Default: trusted
+  STWebSecurityDomain:
+    Type: String
+    Default: semi-trusted
+  VPCID:
+    Type: String
+    Description: Specify the VPC ID
+  TrustedSubnetIDs:
+    Description: List Subnet IDs
+    Type: CommaDelimitedList
+    Default: "subnet-04c6a9ed1dfd857e4,subnet-0cd63c030ef44bdd2,subnet-0ed0d59be8a8b271a"
+  SemiTrustedSubnetIDs:
+    Description: List Subnet IDs
+    Type: CommaDelimitedList
+    Default: "subnet-0a2adf9de55609480,subnet-0cf87c21c18f12b2e,subnet-02d560db27c4f285a"
+  RhelInstanceAMI:
+    Type: String
+    Description: Specify the AMI ID
+    Default: "ami-0a29e9d5f2a5db2a6"
+  AmzLxInstanceAMI:
+    Type: String
+    Description: Specify the AMI ID
+    Default: "ami-0186908e2fdeea8f3"
+  STWebInstanceType:
+    Type: String
+    Default: r5.xlarge
+    Description: Specify instance type
+  INTWebInstanceType:
+    Type: String
+    Default: r5.xlarge
+    Description: Specify instance type
+  CoreInstanceType:
+    Type: String
+    Default: r5.xlarge
+    Description: Specify instance type
+  WPInstanceType:
+    Type: String
+    Default: r5.xlarge
+    Description: Specify instance type
+  WLHInstanceType:
+    Type: String
+    Default: r5.xlarge
+    Description: Specify instance type
+  KenanQInstanceType:
+    Type: String
+    Default: r5.xlarge
+    Description: Specify instance type
+  STWeb1InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  STWeb2InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  STWeb3InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  STWeb4InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  INTWeb1InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  INTWeb2InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  Core1InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  Core2InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  WP1InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  WP2InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  WLH1InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  WLH2InstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  KenanQInstanceName:
+    Type: String
+    Description: Specify the Name of the Instance
+  IamProfile:
+    Type: String
+    Default: CustValue-mgt-EC2-Role
+  InstanceKeyName:
+    Type: String
+    Default: NP-CustValueMgt-EC2-Key
+  awsmigrationproject:
+    Type: String
+    Description: aws map project id
+    Default: MPE12884
+  STWeb1mapmigrated:
+    Type: String
+    Description: aws map server id
+  STWeb2mapmigrated:
+    Type: String
+    Description: aws map server id
+  STWeb3mapmigrated:
+    Type: String
+    Description: aws map server id
+  STWeb4mapmigrated:
+    Type: String
+    Description: aws map server id
+  INTWeb1mapmigrated:
+    Type: String
+    Description: aws map server id
+  INTWeb2mapmigrated:
+    Type: String
+    Description: aws map server id
+  Core1mapmigrated:
+    Type: String
+    Description: aws map server id
+  Core2mapmigrated:
+    Type: String
+    Description: aws map server id
+  WP1mapmigrated:
+    Type: String
+    Description: aws map server id
+  WP2mapmigrated:
+    Type: String
+    Description: aws map server id
+  WLH1mapmigrated:
+    Type: String
+    Description: aws map server id
+  WLH2mapmigrated:
+    Type: String
+    Description: aws map server id
+  KenanQmapmigrated:
+    Type: String
+    Description: aws map server id
+  InfraSupportEMail:
+    Description: Infrastructure group email address to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)"
+    ConstraintDescription: "must be a valid email address."
+    Default: "Sainu.daniel@foxtel.com.au"
+  ApplicationSupportEMail:
+    Description: Application group email address  to notify if there are any scaling operations
+    Type: String
+    AllowedPattern: "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)"
+    ConstraintDescription: "must be a valid email address."
+    Default: "Sainu.daniel@foxtel.com.au"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "General Configuration"
+        Parameters:
+          - EnvName
+      -
+        Label:
+          default: "EC2 build"
+        Parameters:
+          - VPCID
+          - TrustedSubnetIDs
+          - SemiTrustedSubnetIDs
+          - SecurityDomain
+          - STWebSecurityDomain
+          - EnvName
+          - IamProfile
+          - InstanceKeyName
+          - ProjectName
+          - RhelInstanceAMI
+          - AmzLxInstanceAMI
+          - STWebInstanceType
+          - INTWebInstanceType
+          - CoreInstanceType
+          - WPInstanceType
+          - WLHInstanceType
+          - KenanQInstanceType
+          - STWeb1InstanceName
+          - STWeb2InstanceName
+          - STWeb3InstanceName
+          - STWeb4InstanceName
+          - INTWeb1InstanceName
+          - INTWeb2InstanceName
+          - Core1InstanceName
+          - Core2InstanceName
+          - WP1InstanceName
+          - WP2InstanceName
+          - WLH1InstanceName
+          - WLH2InstanceName
+          - KenanQInstanceName
+          - STWebServiceName
+          - INTWebServiceName
+          - CoreServiceName
+          - WPServiceName
+          - WLHServiceName
+          - KenanQServiceName
+          - awsmigrationproject
+          - STWeb1mapmigrated
+          - STWeb2mapmigrated
+          - STWeb3mapmigrated
+          - STWeb4mapmigrated
+          - INTWeb1mapmigrated
+          - INTWeb2mapmigrated
+          - Core1mapmigrated
+          - Core2mapmigrated
+          - WP1mapmigrated
+          - WP2mapmigrated
+          - WLH1mapmigrated
+          - WLH2mapmigrated
+          - KenanQmapmigrated
+    ParameterLabels:
+      EnvName:
+        default: "Environment Tag"
+
+Resources:
+# -----------------------------------------Host Security Groups-----------------------------------------#
+  STWebSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${STWebServiceName}-SG'
+      GroupName : !Sub '${STWebSecurityDomain}-${STWebServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.55.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '8001'
+          ToPort: '8001'
+          CidrIp: 10.8.55.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.55.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.81.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '8001'
+          ToPort: '8001'
+          CidrIp: 10.8.81.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.81.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.80.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '8001'
+          ToPort: '8001'
+          CidrIp: 10.8.80.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.80.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.77.180.0/22
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '5556'
+          ToPort: '5556'
+          CidrIp: 10.77.180.0/22
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.55.0/24
+          Description: 'Melbourne Desktop Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.80.0/23
+          Description: 'Melbourne Desktop Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.82.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.83.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.150.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.143.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.18.80.0/24
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.50.24.0/24
+          Description: 'MELSIT2STCMP subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.12.109.0/24
+          Description: 'BOM Subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.55.0/14
+          Description: 'EC TRAINING NETWORK Subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'STWeb1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  INTWebSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${INTWebServiceName}-SG'
+      GroupName : !Sub '${SecurityDomain}-${INTWebServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.55.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '8001'
+          ToPort: '8001'
+          CidrIp: 10.8.55.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.55.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.81.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '8001'
+          ToPort: '8001'
+          CidrIp: 10.8.81.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.81.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.80.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '8001'
+          ToPort: '8001'
+          CidrIp: 10.8.80.0/24
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.80.0/23
+          Description: "Desktop to webservices server"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.77.180.0/24
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '5556'
+          ToPort: '5556'
+          CidrIp: 10.77.180.0/24
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.82.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.83.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.150.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.143.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.18.80.0/24
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.3.0/24
+          Description: 'melcsdev subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'INTWeb1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  CoreSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${CoreServiceName}-SG'
+      GroupName : !Sub '${SecurityDomain}-${CoreServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.55.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.81.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.80.0/23
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.77.180.0/22
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.82.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.83.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.150.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.143.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7002'
+          CidrIp: 10.18.80.0/24
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7006'
+          ToPort: '7006'
+          CidrIp: 10.77.136.0/24
+          Description: "controlM to core"
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.77.93.0/24
+          Description: 'Citrix cidr'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.77.93.0/24
+          Description: 'Citrix cidr'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'Core1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  WPSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${WPServiceName}-SG'
+      GroupName : !Sub '${SecurityDomain}-${WPServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.252.5/32
+          Description: sit2 app
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '8101'
+          CidrIp: 10.8.55.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '8101'
+          CidrIp: 10.8.81.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '8101'
+          CidrIp: 10.8.80.0/23
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.8.1.75/32
+          Description: melcitrix
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.180.0/22
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.82.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.83.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.150.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.143.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.18.80.0/24
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7006'
+          ToPort: '7006'
+          CidrIp: 10.77.136.0/24
+          Description: "controlM to WP"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.252.6/32
+          Description: 'sit1app to wpwlh'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.8.55.0/24
+          Description: 'Ops desktop access'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.8.80.0/23
+          Description: 'Ops desktop access'
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'WP1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  WLHSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${WLHServiceName}-SG'
+      GroupName : !Sub '${SecurityDomain}-${WLHServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.252.5/32
+          Description: sit2 app
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '8101'
+          CidrIp: 10.8.55.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '8101'
+          CidrIp: 10.8.80.0/23
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '8101'
+          CidrIp: 10.8.81.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.180.0/22
+          Description: AWS LoadBalancer Subnet
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.82.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.83.0.0/16
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.150.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.143.226.0/24
+          Description: "VDI VLan"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.18.80.0/24
+          Description: "VPN VLan"
+        - IpProtocol: tcp
+          FromPort: '7006'
+          ToPort: '7006'
+          CidrIp: 10.77.136.0/24
+          Description: "controlM to WL"
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.252.6/32
+          Description: 'sit1app to wpwlh'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.8.55.0/24
+          Description: 'Ops desktop access'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.8.80.0/23
+          Description: 'Ops desktop access'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'WLH1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+
+  KenanQSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${KenanQServiceName}-SG'
+      GroupName : !Sub '${SecurityDomain}-${KenanQServiceName}-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: '389'
+          ToPort: '389'
+          CidrIp: 10.77.252.6/32
+          Description: 'sit1app to KQ'
+        - IpProtocol: tcp
+          FromPort: '636'
+          ToPort: '636'
+          CidrIp: 10.77.252.6/32
+          Description: 'sit1app to KQ'
+        - IpProtocol: tcp
+          FromPort: '389'
+          ToPort: '389'
+          CidrIp: 10.8.55.0/24
+          Description: 'Ops desktop access'
+        - IpProtocol: tcp
+          FromPort: '389'
+          ToPort: '389'
+          CidrIp: 10.8.80.0/23
+          Description: 'Ops desktop access'
+        - IpProtocol: tcp
+          FromPort: '636'
+          ToPort: '636'
+          CidrIp: 10.8.55.0/24
+          Description: 'Ops desktop access'
+        - IpProtocol: tcp
+          FromPort: '636'
+          ToPort: '636'
+          CidrIp: 10.8.80.0/23
+          Description: 'Ops desktop access'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'KenanQmapmigrated'
+      VpcId: !Ref 'VPCID'
+  KNWBEXSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: kenan-webservices-external-sg
+      GroupName : kenan-webservices-external-sg
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '1024'
+          ToPort: '65535'
+          SourcePrefixListId: pl-06e8b6689c230e57d
+          Description: 'Kenan webservice'
+        - IpProtocol: tcp
+          FromPort: '1024'
+          ToPort: '65535'
+          SourcePrefixListId: pl-07e51248987560f7d
+          Description: 'Kenan webservice'
+        - IpProtocol: tcp
+          FromPort: '1024'
+          ToPort: '65535'
+          SourcePrefixListId: pl-0b4224a76d8c360e7
+          Description: 'Kenan webservice'
+        - IpProtocol: tcp
+          FromPort: '1024'
+          ToPort: '65535'
+          SourcePrefixListId: pl-0dacb003ac2574f7f
+          Description: 'Kenan webservice'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+      VpcId: !Ref 'VPCID'
+# -----------Semi-Trusted Webservices -------------
+# ALB - Security Groups
+  SemiTrustedWSAlbSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${STWebServiceName}-ALB-SG'
+      GroupName : !Sub '${STWebSecurityDomain}-${STWebServiceName}-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnets'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.80.0.0/14
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.128.0.0/11
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.55.0/24
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.80.0/23
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.50.24.0/24
+          Description: 'MELSIT2STCMP subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.12.109.0/24
+          Description: 'BOM Subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.55.0/14
+          Description: 'EC TRAINING NETWORK Subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.8.1.0/24
+          Description: 'HTTPS Access from Marvel'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.8.80.0/23
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          SourcePrefixListId: pl-0089ea49586b2db5f
+          Description: 'HTTPS Access from Marvel'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 10.8.55.0/24
+          Description: 'Melbourne desktop'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'INTWeb1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  # ----------------Elastic Load Balancers------------
+  # Application LoadBalancer
+  SemiTrustedWSAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${STWebServiceName}-ALB
+      SecurityGroups:
+        - !Ref SemiTrustedWSAlbSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref SemiTrustedSubnetIDs]
+        - !Select [1, !Ref SemiTrustedSubnetIDs]
+        - !Select [2, !Ref SemiTrustedSubnetIDs]
+
+  # ST WS Certificate
+  STWSCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: awssit2stwsalb.sms.foxtel.com.au
+      SubjectAlternativeNames:
+        - 'awssit2stwsalb.foxtel.com.au'
+        - 'melsit2strp01v.sms.foxtel.com.au'
+      ValidationMethod: EMAIL
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: 'foxtel:service-name'
+          Value:  !Ref STWebServiceName
+
+  # Listener & TGs
+  SemiTrustedWSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - SemiTrustedWSAlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref SemiTrustedWSTargetGroup
+      LoadBalancerArn: !Ref SemiTrustedWSAlb
+      Port: "38080"
+      Protocol: "HTTP"
+
+  SemiTrustedWSListener443:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - SemiTrustedWSAlb
+    Properties:
+      Certificates:
+        - !Ref STWSCertificate
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref SemiTrustedWSTargetGroup
+      LoadBalancerArn: !Ref SemiTrustedWSAlb
+      Port: "443"
+      Protocol: "HTTPS"
+
+  SemiTrustedWSTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${STWebServiceName}-TG'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 38080
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "300"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+  # awssit2stwsr01 - Host1 for SIT2 ST Web Application Host
+#  awssit2stwsr01:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref STWebInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref STWebSG
+#        - !Ref KNWBEXSG
+#      SubnetId: !Select [1, !Ref SemiTrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.233"
+#      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${STWeb1InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref STWebServiceName
+#        - Key: Security Domain
+#          Value:  !Ref STWebSecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'STWeb1mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2stwsr01AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2stwsr01-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref STWebServiceName
+        - Key: Security Domain
+          Value:  !Ref STWebSecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'STWeb1mapmigrated'
+#  Mountawssit2stwsr01AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2stwsr01
+#      VolumeId: !Ref awssit2stwsr01AppDisk1
+#      Device: /dev/sdf
+
+  # awssit2stwsr02 - Host2 for SIT2 ST Web Application Host
+#  awssit2stwsr02:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref STWebInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref STWebSG
+#        - !Ref KNWBEXSG
+#      SubnetId: !Select [2, !Ref SemiTrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.181.10"
+#      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${STWeb2InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref STWebServiceName
+#        - Key: Security Domain
+#          Value:  !Ref STWebSecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'STWeb2mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2stwsr02AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2stwsr02-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref STWebServiceName
+        - Key: Security Domain
+          Value:  !Ref STWebSecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'STWeb2mapmigrated'
+#  Mountawssit2stwsr02AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2stwsr02
+#      VolumeId: !Ref awssit2stwsr02AppDisk1
+#      Device: /dev/sdf
+
+  # awssit2stwsr03 - Host3 for SIT2 ST Web Application Host
+#  awssit2stwsr03:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref STWebInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref STWebSG
+#        - !Ref KNWBEXSG
+#      SubnetId: !Select [1, !Ref SemiTrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.234"
+#      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${STWeb3InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref STWebServiceName
+#        - Key: Security Domain
+#          Value:  !Ref STWebSecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'STWeb3mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2stwsr03AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2stwsr03-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref STWebServiceName
+        - Key: Security Domain
+          Value:  !Ref STWebSecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'STWeb3mapmigrated'
+#  Mountawssit2stwsr03AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2stwsr03
+#      VolumeId: !Ref awssit2stwsr03AppDisk1
+#      Device: /dev/sdf
+
+
+  # awssit2stwsr04 - Host4 for SIT2 ST Web Application Host
+#  awssit2stwsr04:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref STWebInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref STWebSG
+#        - !Ref KNWBEXSG
+#      SubnetId: !Select [2, !Ref SemiTrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.181.11"
+#      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${STWeb4InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref STWebServiceName
+#        - Key: Security Domain
+#          Value:  !Ref STWebSecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'STWeb4mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2stwsr04AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2stwsr04-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref STWebServiceName
+        - Key: Security Domain
+          Value:  !Ref STWebSecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'STWeb4mapmigrated'
+#  Mountawssit2stwsr04AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2stwsr04
+#      VolumeId: !Ref awssit2stwsr04AppDisk1
+#      Device: /dev/sdf
+
+# -------  awsnonpknque01 - Host for SIT2 Kenan Queue (old OID)--------
+# ALB - Security Groups
+  KenanQueueAlbSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${KenanQServiceName}-ALB-SG'
+      GroupName : !Sub '${SecurityDomain}-${KenanQServiceName}-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '636'
+          ToPort: '636'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet Range'
+        - IpProtocol: tcp
+          FromPort: '389'
+          ToPort: '389'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet Range'
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'KenanQmapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  # Elastic Load Balancers------------
+  # Application LoadBalancer
+  KenanQueueAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${KenanQServiceName}-ALB
+      SecurityGroups:
+        - !Ref KenanQueueAlbSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref TrustedSubnetIDs]
+        - !Select [1, !Ref TrustedSubnetIDs]
+        - !Select [2, !Ref TrustedSubnetIDs]
+  # Listener & TGs
+  KenanQueueAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - KenanQueueAlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref KenanQueueTargetGroup
+      LoadBalancerArn: !Ref KenanQueueAlb
+      Port: "636"
+      Protocol: "HTTP"
+  KenanQueueTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${KenanQServiceName}-TG'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 636
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "300"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+  awsnonpknque01:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmzLxInstanceAMI
+      InstanceType: !Ref KenanQInstanceType
+      KeyName: !Ref InstanceKeyName
+      SecurityGroupIds:
+        - !Ref KenanQSG
+      SubnetId: !Select [1, !Ref TrustedSubnetIDs]
+      PrivateIpAddress: "10.77.180.81"
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      DisableApiTermination: true
+      IamInstanceProfile: !Ref IamProfile
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${KenanQInstanceName}'
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref KenanQServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: foxtel:backup-plan
+          Value:  true
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'KenanQmapmigrated'
+
+      BlockDeviceMappings:
+        - DeviceName:  /dev/sda1
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: '40'
+        - DeviceName: /dev/sdb
+          VirtualName: ephemeral0
+
+      UserData:
+        Fn::Base64:
+          !Sub |
+           #!/bin/bash
+           # Setup AWS CLI
+            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+            yum install unzip -y
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip;sudo ./aws/install
+           # SSM Agent install & Setup
+            useradd ssm-user
+            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+            yum install /amazon-ssm-agent.rpm -y
+            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+            echo "#SSM user root access "  >> /etc/sudoers
+            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+           # Install nvme-cli
+            yum install nvme-cli -y
+  awsnonpknque01AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !GetAtt awsnonpknque01.AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: awsnonpknque01-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref KenanQServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'KenanQmapmigrated'
+  Mountawsnonpknque01AppDisk1:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref awsnonpknque01
+      VolumeId: !Ref awsnonpknque01AppDisk1
+      Device: /dev/sdf
+
+# ------------ awssit2core01 - Host1 for SIT2 Core------------
+
+# ALB - Security Groups
+  CoreAlbSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${CoreServiceName}-ALB-SG'
+      GroupName : !Sub '${SecurityDomain}-${CoreServiceName}-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet range'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.80.0.0/14
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.128.0.0/11
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.55.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.81.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '8001'
+          CidrIp: 10.8.80.0/24
+          Description: Ops Desktops
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '7001'
+          ToPort: '7001'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'Core1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  # Elastic Load Balancers------------
+  # CSS Certificate
+  CoreCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: nonprod.csrportal.foxtel.com.au
+      SubjectAlternativeNames:
+        - '*.csrportal.foxtel.com.au'
+      ValidationMethod: EMAIL
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: 'foxtel:service-name'
+          Value:  !Ref CoreServiceName
+
+  # Application LoadBalancer
+  CoreAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${CoreServiceName}-ALB
+      SecurityGroups:
+        - !Ref CoreAlbSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref TrustedSubnetIDs]
+        - !Select [1, !Ref TrustedSubnetIDs]
+        - !Select [2, !Ref TrustedSubnetIDs]
+  # Listener & TGs
+  CoreAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - CoreAlb
+    Properties:
+      Certificates:
+        - !Ref CoreCertificate
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref CoreTargetGroup
+      LoadBalancerArn: !Ref CoreAlb
+      Port: "7001"
+      Protocol: "HTTPS"
+
+  CoreTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${CoreServiceName}-TG'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 7001
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "300"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+#  awssit2core01:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref CoreInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref CoreSG
+#      SubnetId: !Select [1, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.83"
+#      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${Core1InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref CoreServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'Core1mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2core01AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2core01-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref CoreServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'Core1mapmigrated'
+#  Mountawssit2core01AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2core01
+#      VolumeId: !Ref awssit2core01AppDisk1
+#      Device: /dev/sdf
+
+  # awssit2core02 - Host2 for SIT2 Core
+#  awssit2core02:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref CoreInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref CoreSG
+#      SubnetId: !Select [2, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.134"
+#      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${Core2InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref CoreServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'Core2mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2core02AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2core02-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref CoreServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'Core2mapmigrated'
+#  Mountawssit2core02AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2core02
+#      VolumeId: !Ref awssit2core02AppDisk1
+#      Device: /dev/sdf
+
+# --------  awssit2wp01 - Host1 for SIT2 WorkPoint ---------
+
+# ALB - Security Groups
+  WpWlhAlbSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${WPServiceName}-ALB-SG'
+      GroupName : !Sub '${SecurityDomain}-${WPServiceName}-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet Range'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.80.0.0/14
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.128.0.0/11
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.77.252.6/32
+          Description: 'sit1app to wpwlh'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.8.55.0/24
+          Description: 'Ops desktop access'
+        - IpProtocol: tcp
+          FromPort: '7101'
+          ToPort: '7101'
+          CidrIp: 10.8.80.0/23
+          Description: 'Ops desktop access'
+
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'WP1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  # Elastic Load Balancers------------
+  # Application LoadBalancer
+  WpWlhAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${WPServiceName}-ALB
+      SecurityGroups:
+        - !Ref WpWlhAlbSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref TrustedSubnetIDs]
+        - !Select [1, !Ref TrustedSubnetIDs]
+        - !Select [2, !Ref TrustedSubnetIDs]
+  # Listener & TGs  -- WorkPoint
+  WpAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - WpWlhAlb
+    Properties:
+      DefaultActions:
+        - Type: "fixed-response"
+          FixedResponseConfig:
+             ContentType: text/plain
+             MessageBody: "You've reached the the Load Balancer, but not matched any of the Host based rules"
+             StatusCode: 200
+      LoadBalancerArn: !Ref WpWlhAlb
+      Port: "7101"
+      Protocol: "HTTP"
+
+  WpAlbListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WpTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /wpConsole*
+            - /WPInterfServlet/WP*
+      ListenerArn: !Ref WpAlbListener
+      Priority: 1
+
+  WlhAlbListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WlhTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /workListHandler*
+      ListenerArn: !Ref WpAlbListener
+      Priority: 2
+
+  WpTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${WPServiceName}-TG'
+      HealthCheckPath: "/wpHeartbeat/index.html"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 7101
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "300"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+
+  WlhTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${WLHServiceName}-TG'
+      HealthCheckPath: "/wlhheartbeat/index.html"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 7101
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "300"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+#  awssit2wp01:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref WPInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref WPSG
+#      SubnetId: !Select [1, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.84"
+#      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${WP1InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref WPServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'WP1mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2wp01AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2wp01-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref WPServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'WP1mapmigrated'
+#  Mountawssit2wp01AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2wp01
+#      VolumeId: !Ref awssit2wp01AppDisk1
+#      Device: /dev/sdf
+
+  # awssit2wp02 - Host2 for SIT2 WorkPoint
+#  awssit2wp02:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref WPInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref WPSG
+#      SubnetId: !Select [2, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.135"
+#      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${WP2InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref WPServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'WP2mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2wp02AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2wp02-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref WPServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'WP2mapmigrated'
+#  Mountawssit2wp02AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2wp02
+#      VolumeId: !Ref awssit2wp02AppDisk1
+#      Device: /dev/sdf
+
+  # awssit2wlh01 - Host1 for SIT2 Worklisthandler
+#  awssit2wlh01:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref WLHInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref WLHSG
+#      SubnetId: !Select [1, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.85"
+#      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${WLH1InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref WLHServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'WLH1mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2wlh01AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2wlh01-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref WLHServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'WLH1mapmigrated'
+#  Mountawssit2wlh01AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2wlh01
+#      VolumeId: !Ref awssit2wlh01AppDisk1
+#      Device: /dev/sdf
+
+  # awssit2wlh02 - Host2 for SIT2 Worklisthandler
+#  awssit2wlh02:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref WLHInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref WLHSG
+#      SubnetId: !Select [2, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.136"
+#      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${WLH2InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref WLHServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'WLH2mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2wlh02AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2wlh02-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref WLHServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'WLH2mapmigrated'
+#  Mountawssit2wlh02AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2wlh02
+#      VolumeId: !Ref awssit2wlh02AppDisk1
+#      Device: /dev/sdf
+# ..............................Internal Webservices ...........................
+
+# ALB - Security Groups
+  IntWSAlbSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub '${INTWebServiceName}-ALB-SG'
+      GroupName : !Sub '${SecurityDomain}-${INTWebServiceName}-alb-sg'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.77.0.0/16
+          Description: 'AWS Subnet Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.80.0.0/14
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.128.0.0/11
+          Description: 'Foxtel VPN Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.55.0/24
+          Description: 'Melbourne Desktop Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.80.0/23
+          Description: 'Melbourne Desktop Range'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.3.0/24
+          Description: 'melcsdev subnet'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.8.1.0/24
+          Description: 'VM to SIT2'
+        - IpProtocol: tcp
+          FromPort: '38080'
+          ToPort: '38080'
+          CidrIp: 10.100.160.0/19
+          Description: 'Gitops Dev VPC'
+      Tags:
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'INTWeb1mapmigrated'
+      VpcId: !Ref 'VPCID'
+
+  # ALB-SNS Notifications-
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref InfraSupportEMail
+          Protocol: email
+  #      - Endpoint: !Ref ApplicationSupportEmail
+  #        Protocol: email
+
+  # ----------------Elastic Load Balancers------------
+  # Application LoadBalancer
+  IntWSAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-${INTWebServiceName}-ALB
+      SecurityGroups:
+        - !Ref IntWSAlbSG
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Select [0, !Ref TrustedSubnetIDs]
+        - !Select [1, !Ref TrustedSubnetIDs]
+        - !Select [2, !Ref TrustedSubnetIDs]
+  # Listener & TGs
+  IntWSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+        - IntWSAlb
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref IntWSTargetGroup
+      LoadBalancerArn: !Ref IntWSAlb
+      Port: "38080"
+      Protocol: "HTTP"
+  IntWSTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvName}-${INTWebServiceName}-TG'
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 38080
+      Protocol: "HTTP"
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "300"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+      VpcId: !Ref VPCID
+
+  # awssit2inwsr01- Host1 for INT Web Services
+#  awssit2inwsr01:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref INTWebInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref INTWebSG
+#        - !Ref KNWBEXSG
+#      SubnetId: !Select [1, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.86"
+#      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${INTWeb1InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref INTWebServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'INTWeb1mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2inwsr01AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2inwsr01-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref INTWebServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'INTWeb1mapmigrated'
+#  Mountawssit2inwsr01AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2inwsr01
+#      VolumeId: !Ref awssit2inwsr01AppDisk1
+#      Device: /dev/sdf
+
+  # awssit2inwsr02- Host2 for INT Web Services
+#  awssit2inwsr02:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref RhelInstanceAMI
+#      InstanceType: !Ref INTWebInstanceType
+#      KeyName: !Ref InstanceKeyName
+#      SecurityGroupIds:
+#        - !Ref INTWebSG
+#        - !Ref KNWBEXSG
+#      SubnetId: !Select [2, !Ref TrustedSubnetIDs]
+#      PrivateIpAddress: "10.77.180.137"
+#      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+#      DisableApiTermination: true
+#      IamInstanceProfile: !Ref IamProfile
+#      Tags:
+#        -
+#          Key: Name
+#          Value: !Sub '${INTWeb2InstanceName}'
+#        - Key: Environment
+#          Value: !Ref EnvName
+#        - Key: 'foxtel:service-name'
+#          Value:  !Ref INTWebServiceName
+#        - Key: Security Domain
+#          Value:  !Ref SecurityDomain
+#        - Key: foxtel:backup-plan
+#          Value:  true
+#        - Key: aws-migration-project-id
+#          Value: !Ref 'awsmigrationproject'
+#        - Key: map-migrated
+#          Value: !Ref 'INTWeb2mapmigrated'
+
+#      BlockDeviceMappings:
+#        - DeviceName:  /dev/sda1
+#          Ebs:
+#            VolumeType: gp2
+#            VolumeSize: '40'
+#        - DeviceName: /dev/sdb
+#          VirtualName: ephemeral0
+
+#      UserData:
+#        Fn::Base64:
+#          !Sub |
+#           #!/bin/bash
+#           # Setup AWS CLI
+#            export http_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            export https_proxy=http://awsproxy.aws.foxtel.internal:3128
+#            yum install unzip -y
+#            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#            unzip awscliv2.zip;sudo ./aws/install
+#           # SSM Agent install & Setup
+#            useradd ssm-user
+#            curl -v -O https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+#            yum install /amazon-ssm-agent.rpm -y
+#            systemctl enable amazon-ssm-agent;systemctl start amazon-ssm-agent
+#            echo "#SSM user root access "  >> /etc/sudoers
+#            echo "ssm-user ALL=(ALL)       NOPASSWD:ALL" >> /etc/sudoers
+#           # Install nvme-cli
+#            yum install nvme-cli -y
+  awssit2inwsr02AppDisk1:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 40
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: awssit2inwsr02-AppDisk1
+        - Key: Environment
+          Value: !Ref EnvName
+        - Key: 'foxtel:service-name'
+          Value:  !Ref INTWebServiceName
+        - Key: Security Domain
+          Value:  !Ref SecurityDomain
+        - Key: aws-migration-project-id
+          Value: !Ref 'awsmigrationproject'
+        - Key: map-migrated
+          Value: !Ref 'INTWeb2mapmigrated'
+#  Mountawssit2inwsr02AppDisk1:
+#    Type: AWS::EC2::VolumeAttachment
+#    Properties:
+#      InstanceId: !Ref awssit2inwsr02
+#      VolumeId: !Ref awssit2inwsr02AppDisk1
+#      Device: /dev/sdf
+  
+  AppsSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: "KenanPlatformEngineering@foxtel.com.au"
+          Protocol: "email"
+      TopicName: AppsSNS
+
+     
+Outputs:
+  awsnonpknque01:
+    Description: SIT2 Kenan Queue Server (OID)
+    Value: !Ref awsnonpknque01
+  
+
+  # ENIs Outputs
+#  awssit2stwsr01IPAddress:
+#    Description: Private IP address for awssit2stwsr01
+#    Value: !Join ['-', [!Ref STWeb1InstanceName, !GetAtt [awssit2stwsr01, PrivateIpAddress]]]
